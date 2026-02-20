@@ -8,7 +8,7 @@ class Asaas_gateway_webhook extends App_Controller
         $gateways = $this->app->get_payment_gateways();
         $gateway = null;
         foreach ($gateways as $g) {
-            if ($g['id'] == 'asaas_online') {
+            if ($g['id'] == 'asaas_gateway') {
                 $gateway = $g;
                 break;
             }
@@ -87,7 +87,7 @@ class Asaas_gateway_webhook extends App_Controller
                 $payment_data = [
                     'amount' => $payment['value'],
                     'invoiceid' => $invoice_id,
-                    'paymentmode' => 'asaas_online',
+                    'paymentmode' => 'asaas_gateway',
                     'date' => date('Y-m-d'),
                     'transactionid' => $payment['id'],
                     'note' => 'Payment via Asaas API. Status: ' . $payment['status']

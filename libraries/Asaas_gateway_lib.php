@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Asaas_online extends App_gateway
+class Asaas_gateway_lib extends App_gateway
 {
     public function __construct()
     {
@@ -13,7 +13,7 @@ class Asaas_online extends App_gateway
         /**
          * Gateway unique id
          */
-        $this->setId('asaas_online');
+        $this->setId('asaas_gateway');
 
         /**
          * Gateway name
@@ -64,10 +64,5 @@ class Asaas_online extends App_gateway
     public function process_payment($data)
     {
         redirect(site_url('asaas_gateway/client/pay/' . $data['invoiceid'] . '/' . $data['invoice']->hash));
-    }
-
-    public function get_action_url($invoice)
-    {
-        return site_url('asaas_gateway/client/pay/' . $invoice->id . '/' . $invoice->hash);
     }
 }
