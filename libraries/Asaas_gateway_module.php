@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Asaas_gateway_lib extends App_gateway
+class Asaas_gateway_module extends App_gateway
 {
     public function __construct()
     {
@@ -59,6 +59,13 @@ class Asaas_gateway_lib extends App_gateway
                 'default' => 'BRL',
             ],
         ]);
+
+        /**
+         * Mandatory for button visibility in Client Profile
+         */
+        // $this->visible_customer_profile = true; // Not standard property, but some custom themes use it?
+        // App_gateway doesn't have it.
+        // However, 'process_payment' presence usually triggers it.
     }
 
     public function process_payment($data)

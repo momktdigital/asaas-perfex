@@ -21,7 +21,7 @@ function asaas_gateway_activation_hook()
 
 register_language_files(ASAAS_GATEWAY_MODULE_NAME, [ASAAS_GATEWAY_MODULE_NAME]);
 
-register_payment_gateway('asaas_gateway_lib', 'asaas_gateway');
+register_payment_gateway('asaas_gateway_module', 'asaas_gateway');
 
 hooks()->add_action('after_invoice_added', 'asaas_gateway_invoice_added_hook');
 
