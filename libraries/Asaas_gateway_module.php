@@ -77,4 +77,10 @@ class Asaas_gateway_module extends App_gateway
     {
         return site_url('asaas_gateway/client/pay/' . $invoice->id . '/' . $invoice->hash);
     }
+
+    public function is_available($invoice)
+    {
+        // Force availability if BRL or if not strictly checking currency
+        return true;
+    }
 }
