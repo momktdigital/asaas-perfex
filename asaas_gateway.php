@@ -25,6 +25,52 @@ register_payment_gateway('asaas_gateway_module', 'asaas_gateway');
 
 hooks()->add_action('after_invoice_added', 'asaas_gateway_invoice_added_hook');
 
+hooks()->add_filter('invoice_html_view_data', 'asaas_gateway_inject_payment_button');
+
+function asaas_gateway_inject_payment_button($data)
+{
+    $CI = &get_instance();
+    $CI->load->model('invoices_model');
+
+    // Check if invoice is not paid
+    if($data['invoice']->status == Invoices_model::STATUS_PAID || $data['invoice']->status == Invoices_model::STATUS_CANCELLED) {
+        return $data;
+    }
+
+    $found = false;
+    foreach($data['payment_modes'] as $mode) {
+        if($mode['id'] == 'asaas_gateway') {
+            $found = true;
+            break;
+        }
+    }
+
+    if(!$found) {
+        // Check if allowed
+        $allowed_modes = unserialize($data['invoice']->allowed_payment_modes);
+        if(is_array($allowed_modes) && in_array('asaas_gateway', $allowed_modes)) {
+
+            // Ensure library is loaded to provide instance
+            $CI->load->library('asaas_gateway/asaas_gateway_module');
+
+            $data['payment_modes'][] = [
+                'id' => 'asaas_gateway',
+                'name' => _l('asaas_gateway'),
+                'description' => '',
+                'selected' => true, // Force selection logic if needed
+                'active' => true,
+                'show_on_pdf' => 1,
+                'invoices_only' => 0,
+                'expenses_only' => 0,
+                'selected_by_default' => 1,
+                'instance' => $CI->asaas_gateway_module
+            ];
+        }
+    }
+
+    return $data;
+}
+
 function asaas_gateway_invoice_added_hook($invoice_id)
 {
     $CI = &get_instance();
