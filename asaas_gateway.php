@@ -1,6 +1,14 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
+/*
+Module Name: Asaas Gateway
+Description: Asaas Payment Gateway for Perfex CRM
+Version: 1.0.0
+Requires at least: 2.3.*
+Author: Jules
+*/
+
 class Asaas_gateway extends App_gateway
 {
     public function __construct()
