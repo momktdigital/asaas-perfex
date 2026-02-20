@@ -72,4 +72,9 @@ class Asaas_gateway_module extends App_gateway
     {
         redirect(site_url('asaas_gateway/client/pay/' . $data['invoiceid'] . '/' . $data['invoice']->hash));
     }
+
+    public function get_action_url($invoice)
+    {
+        return site_url('asaas_gateway/client/pay/' . $invoice->id . '/' . $invoice->hash);
+    }
 }
