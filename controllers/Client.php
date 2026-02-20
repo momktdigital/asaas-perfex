@@ -14,7 +14,7 @@ class Client extends App_Controller
         $gateways = $this->app->get_payment_gateways();
         $gateway = null;
         foreach ($gateways as $g) {
-            if ($g['id'] == 'asaas_gateway') {
+            if ($g['id'] == 'asaas_online') {
                 $gateway = $g;
                 break;
             }
@@ -295,7 +295,7 @@ class Client extends App_Controller
 
     private function get_split_config()
     {
-        $gateway = $this->invoices_model->get_payment_gateway('asaas_gateway');
+        $gateway = $this->invoices_model->get_payment_gateway('asaas_online');
         $json = $gateway['instance']->getSetting('split_config');
         if(empty($json)) return null;
 
