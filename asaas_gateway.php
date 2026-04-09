@@ -115,7 +115,7 @@ function asaas_gateway_invoice_added_hook($invoice_id)
             if(!$customer_id) {
                  $primary_contact = $CI->clients_model->get_contact(get_primary_contact_user_id($client->userid));
                  $client_email = $primary_contact ? $primary_contact->email : '';
-                 $client_phone = $primary_contact ? $primary_contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
+                 $client_phone = ($primary_contact && !empty($primary_contact->phonenumber)) ? $primary_contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
                  $data_c = [
                     'name' => isset($client->company) ? $client->company : '',
                     'cpfCnpj' => $cpfCnpj,

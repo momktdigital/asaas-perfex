@@ -70,6 +70,9 @@ class Asaas_lib
         } else {
             // Log error
             $errorMessage = isset($result['errors'][0]['description']) ? $result['errors'][0]['description'] : 'Unknown Error';
+            if ($errorMessage === 'Unknown Error') {
+                $errorMessage .= ' | Raw Response: ' . $response;
+            }
             log_activity('Asaas API Error [' . $http_code . ']: ' . $errorMessage . ' - Endpoint: ' . $endpoint . ' - Data: ' . json_encode($data));
             return ['success' => false, 'error' => $errorMessage, 'details' => $result];
         }
