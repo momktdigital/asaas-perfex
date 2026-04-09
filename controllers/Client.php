@@ -57,12 +57,13 @@ class Client extends ClientsController
         $client = $this->clients_model->get($invoice->clientid);
         $data = $this->input->post();
 
-        $customer_id = $this->get_or_create_asaas_customer($client);
+        $customer_res = $this->get_or_create_asaas_customer($client);
 
-        if(!$customer_id) {
-            set_alert('danger', _l('asaas_customer_sync_failed'));
+        if(!$customer_res['success']) {
+            set_alert('danger', _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']);
             redirect(site_url('asaas_gateway/client/pay/' . $invoice_id . '/' . $hash));
         }
+        $customer_id = $customer_res['id'];
 
         $expiry = explode('/', $data['expiry']);
         if(count($expiry) != 2) {
@@ -147,12 +148,13 @@ class Client extends ClientsController
         $invoice = $this->invoices_model->get($invoice_id);
         $client = $this->clients_model->get($invoice->clientid);
 
-        $customer_id = $this->get_or_create_asaas_customer($client);
+        $customer_res = $this->get_or_create_asaas_customer($client);
 
-        if(!$customer_id) {
-            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed')]);
+        if(!$customer_res['success']) {
+            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']]);
             return;
         }
+        $customer_id = $customer_res['id'];
 
         $charge_data = [
             'customer' => $customer_id,
@@ -191,12 +193,13 @@ class Client extends ClientsController
         $invoice = $this->invoices_model->get($invoice_id);
         $client = $this->clients_model->get($invoice->clientid);
 
-        $customer_id = $this->get_or_create_asaas_customer($client);
+        $customer_res = $this->get_or_create_asaas_customer($client);
 
-        if(!$customer_id) {
-            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed')]);
+        if(!$customer_res['success']) {
+            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']]);
             return;
         }
+        $customer_id = $customer_res['id'];
 
         $charge_data = [
             'customer' => $customer_id,
@@ -229,12 +232,13 @@ class Client extends ClientsController
         $invoice = $this->invoices_model->get($invoice_id);
         $client = $this->clients_model->get($invoice->clientid);
 
-        $customer_id = $this->get_or_create_asaas_customer($client);
+        $customer_res = $this->get_or_create_asaas_customer($client);
 
-        if(!$customer_id) {
-            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed')]);
+        if(!$customer_res['success']) {
+            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']]);
             return;
         }
+        $customer_id = $customer_res['id'];
 
         $auth_data = [
             'customer' => $customer_id,
@@ -271,13 +275,14 @@ class Client extends ClientsController
         // Fetch Primary Contact for email and phone
         $primary_contact = $this->clients_model->get_contact(get_primary_contact_user_id($client->userid));
         $client_email = $primary_contact ? $primary_contact->email : '';
-        $client_phone = $primary_contact ? $primary_contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
+        // If primary contact has no phone, fallback to client company phone
+        $client_phone = ($primary_contact && !empty($primary_contact->phonenumber)) ? $primary_contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
 
         // Try to find existing by CPF/CNPJ
         if(!empty($cpfCnpj)) {
             $existing = $this->asaas_lib->get_customer_by_cpf_cnpj($cpfCnpj);
             if($existing['success'] && !empty($existing['data']['data'])) {
-                return $existing['data']['data'][0]['id'];
+                return ['success' => true, 'id' => $existing['data']['data'][0]['id']];
             }
         }
 
@@ -293,12 +298,12 @@ class Client extends ClientsController
         $res = $this->asaas_lib->create_customer($data);
 
         if($res['success']) {
-            return $res['data']['id'];
+            return ['success' => true, 'id' => $res['data']['id']];
         }
 
         log_message('error', 'Asaas Create Customer Failed: ' . print_r($res, true) . ' Data sent: ' . print_r($data, true));
 
-        return false;
+        return ['success' => false, 'error' => $res['error']];
     }
 
     private function get_split_config()
