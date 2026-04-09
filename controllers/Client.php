@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Client extends App_Controller
+class Client extends ClientsController
 {
     public function __construct()
     {
