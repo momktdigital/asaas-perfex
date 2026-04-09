@@ -5,52 +5,71 @@ class Asaas_gateway_webhook extends App_Controller
 {
     public function notify()
     {
-        $gateways = $this->app->get_payment_gateways();
-        $gateway = null;
-        foreach ($gateways as $g) {
-            if ($g['id'] == 'asaas_gateway') {
-                $gateway = $g;
-                break;
+        try {
+            $gateways = $this->app->get_payment_gateways();
+            $gateway = null;
+            foreach ($gateways as $g) {
+                if ($g['id'] == 'asaas_gateway') {
+                    $gateway = $g;
+                    break;
+                }
             }
-        }
 
-        if (!$gateway) {
-            show_404();
-        }
-
-        $token = $this->encryption->decrypt($gateway['instance']->getSetting('webhook_token'));
-        $headers = $this->input->request_headers();
-        $incoming_token = '';
-
-        foreach($headers as $key => $val) {
-            if(strtolower($key) == 'asaas-access-token') {
-                $incoming_token = $val;
-                break;
+            if (!$gateway) {
+                header("HTTP/1.1 500 Internal Server Error");
+                echo json_encode(['error' => 'Gateway not found']);
+                return;
             }
-        }
 
-        if ($token != $incoming_token) {
-            log_activity('Asaas Webhook Failed: Invalid Token');
-            show_404();
-        }
+            $token = $this->encryption->decrypt($gateway['instance']->getSetting('webhook_token'));
+            $headers = $this->input->request_headers();
+            $incoming_token = '';
 
-        $post_data = json_decode(file_get_contents('php://input'), true);
+            foreach($headers as $key => $val) {
+                if(strtolower($key) == 'asaas-access-token') {
+                    $incoming_token = $val;
+                    break;
+                }
+            }
 
-        if (!$post_data || !isset($post_data['event'])) {
-            return;
-        }
+            if ($token !== $incoming_token || empty($token)) {
+                log_activity('Asaas Webhook Failed: Invalid Token');
+                header("HTTP/1.1 401 Unauthorized");
+                echo json_encode(['error' => 'Invalid Token']);
+                return;
+            }
 
-        $event = $post_data['event'];
-        $payment = isset($post_data['payment']) ? $post_data['payment'] : null;
+            $post_data = json_decode(file_get_contents('php://input'), true);
 
-        if ($event == 'PAYMENT_RECEIVED' && $payment) {
-            $this->handle_payment_received($payment);
+            if (!$post_data || !isset($post_data['event'])) {
+                header("HTTP/1.1 400 Bad Request");
+                echo json_encode(['error' => 'Invalid request payload']);
+                return;
+            }
+
+            $event = $post_data['event'];
+            $payment = isset($post_data['payment']) ? $post_data['payment'] : null;
+
+            if ($event == 'PAYMENT_RECEIVED' && $payment) {
+                $this->handle_payment_received($payment);
+            }
+
+            header("HTTP/1.1 200 OK");
+            echo json_encode(['success' => true]);
+
+        } catch (Exception $e) {
+            log_activity('Asaas Webhook Error: ' . $e->getMessage());
+            header("HTTP/1.1 500 Internal Server Error");
+            echo json_encode(['error' => 'Internal Server Error']);
         }
     }
 
     private function handle_payment_received($payment)
     {
-        $externalReference = $payment['externalReference'];
+        $externalReference = isset($payment['externalReference']) ? $payment['externalReference'] : '';
+        if (empty($externalReference)) {
+            return;
+        }
 
         // Check if it is Auth
         if (strpos($externalReference, 'auth_') === 0) {
