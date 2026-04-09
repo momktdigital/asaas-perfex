@@ -82,7 +82,8 @@ function asaas_gateway_invoice_added_hook($invoice_id)
     if($invoice->is_recurring_from != NULL) {
         $CI->load->library('asaas_gateway/asaas_lib');
 
-        $gateways = $CI->app->get_payment_gateways();
+        $CI->load->model('payment_modes_model');
+        $gateways = $CI->payment_modes_model->get('', ['active' => 1]);
         $gateway = null;
         foreach ($gateways as $g) {
             if ($g['id'] == 'asaas_gateway') {
