@@ -85,11 +85,11 @@ class Client extends ClientsController
             ],
             'creditCardHolderInfo' => [
                 'name' => $data['holderName'],
-                'email' => $client->email,
-                'cpfCnpj' => preg_replace('/[^0-9]/', '', $client->vat),
-                'postalCode' => preg_replace('/[^0-9]/', '', $client->billing_zip),
+                'email' => $this->clients_model->get_contact(get_primary_contact_user_id($client->userid))->email ?? '',
+                'cpfCnpj' => preg_replace('/[^0-9]/', '', $client->vat ?? ''),
+                'postalCode' => preg_replace('/[^0-9]/', '', $client->billing_zip ?? ''),
                 'addressNumber' => '0', // Required by Asaas, defaulting to 0 as Perfex doesn't strictly enforce it separately
-                'phone' => preg_replace('/[^0-9]/', '', $client->phonenumber),
+                'phone' => preg_replace('/[^0-9]/', '', $this->clients_model->get_contact(get_primary_contact_user_id($client->userid))->phonenumber ?? $client->phonenumber ?? ''),
             ],
             'remoteIp' => $this->input->ip_address()
         ];
@@ -266,7 +266,12 @@ class Client extends ClientsController
 
     private function get_or_create_asaas_customer($client)
     {
-        $cpfCnpj = preg_replace('/[^0-9]/', '', $client->vat);
+        $cpfCnpj = preg_replace('/[^0-9]/', '', isset($client->vat) ? $client->vat : '');
+
+        // Fetch Primary Contact for email and phone
+        $primary_contact = $this->clients_model->get_contact(get_primary_contact_user_id($client->userid));
+        $client_email = $primary_contact ? $primary_contact->email : '';
+        $client_phone = $primary_contact ? $primary_contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
 
         // Try to find existing by CPF/CNPJ
         if(!empty($cpfCnpj)) {
@@ -278,10 +283,10 @@ class Client extends ClientsController
 
         // Create new
         $data = [
-            'name' => $client->company,
+            'name' => isset($client->company) ? $client->company : '',
             'cpfCnpj' => $cpfCnpj,
-            'email' => $client->email,
-            'mobilePhone' => preg_replace('/[^0-9]/', '', $client->phonenumber),
+            'email' => $client_email,
+            'mobilePhone' => preg_replace('/[^0-9]/', '', $client_phone),
             'externalReference' => $client->userid
         ];
 
