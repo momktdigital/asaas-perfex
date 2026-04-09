@@ -201,11 +201,17 @@ class Client extends ClientsController
         }
         $customer_id = $customer_res['id'];
 
+        // Ensure due date is valid (Asaas requires due date >= today for Boleto)
+        $dueDate = $invoice->duedate;
+        if(strtotime($dueDate) < strtotime(date('Y-m-d'))) {
+            $dueDate = date('Y-m-d');
+        }
+
         $charge_data = [
             'customer' => $customer_id,
             'billingType' => 'BOLETO',
             'value' => $invoice->total,
-            'dueDate' => date('Y-m-d', strtotime('+3 days')), // Boleto needs future date usually
+            'dueDate' => $dueDate,
             'externalReference' => $invoice_id,
             'description' => 'Invoice #' . $invoice->number
         ];
@@ -240,17 +246,35 @@ class Client extends ClientsController
         }
         $customer_id = $customer_res['id'];
 
+        // Determine Frequency
+        $frequency = 'MONTHLY'; // Default
+        if (isset($invoice->recurring_type) && isset($invoice->custom_recurring)) {
+             if ($invoice->recurring == 1 && $invoice->recurring_type == 'weeks') {
+                 $frequency = 'WEEKLY';
+             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'months') {
+                 $frequency = 'MONTHLY';
+             } else if ($invoice->recurring == 6 && $invoice->recurring_type == 'months') {
+                 $frequency = 'SEMIANNUALLY';
+             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'years') {
+                 $frequency = 'YEARLY';
+             } else if ($invoice->recurring == 12 && $invoice->recurring_type == 'months') {
+                 $frequency = 'YEARLY';
+             }
+        } else if (isset($invoice->recurring)) {
+             // Basic fallback for older perfex versions if recurring_type isn't set,
+             // recurring is usually number of months.
+             if ($invoice->recurring == 1) $frequency = 'MONTHLY';
+             if ($invoice->recurring == 6) $frequency = 'SEMIANNUALLY';
+             if ($invoice->recurring == 12) $frequency = 'YEARLY';
+        }
+
         $auth_data = [
             'customer' => $customer_id,
             'value' => $invoice->total,
             'description' => 'Pix Automatico for Recurring Invoice',
             'externalReference' => 'auth_' . $invoice->id,
-            // 'frequency' => 'MONTHLY', // Depending on recurring type? Asaas doesn't strictly require frequency for Authorization J3?
-            // Docs say: "O QR Code gerado contém tanto os dados do primeiro pagamento... quanto os dados necessários para configurar pagamentos recorrentes futuros."
-            // We verify the API params.
+            'frequency' => $frequency
         ];
-
-        // We probably should check recurring frequency of invoice but for now default.
 
         $res = $this->asaas_lib->create_pix_auth($auth_data);
 
