@@ -308,7 +308,18 @@ class Client extends ClientsController
 
     private function get_split_config()
     {
-        $gateway = $this->invoices_model->get_payment_gateway('asaas_gateway');
+        $this->load->model('payment_modes_model');
+        $gateways = $this->payment_modes_model->get('', ['active' => 1]);
+        $gateway = null;
+        foreach ($gateways as $g) {
+            if ($g['id'] == 'asaas_gateway') {
+                $gateway = $g;
+                break;
+            }
+        }
+
+        if(!$gateway) return null;
+
         $json = $gateway['instance']->getSetting('split_config');
         if(empty($json)) return null;
 
