@@ -296,6 +296,8 @@ class Client extends ClientsController
             return $res['data']['id'];
         }
 
+        log_message('error', 'Asaas Create Customer Failed: ' . print_r($res, true) . ' Data sent: ' . print_r($data, true));
+
         return false;
     }
 
