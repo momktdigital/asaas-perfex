@@ -11,7 +11,8 @@ class Client extends ClientsController
         $this->load->model('clients_model');
 
         // Load the gateway settings to configure the library
-        $gateways = $this->app->get_payment_gateways();
+        $this->load->model('payment_modes_model');
+        $gateways = $this->payment_modes_model->get('', ['active' => 1]);
         $gateway = null;
         foreach ($gateways as $g) {
             if ($g['id'] == 'asaas_gateway') {
