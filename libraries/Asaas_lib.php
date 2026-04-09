@@ -7,7 +7,7 @@ class Asaas_lib
     private $api_key;
     private $sandbox = false;
     private $base_url_prod = 'https://api.asaas.com/v3';
-    private $base_url_sandbox = 'https://sandbox.asaas.com/v3';
+    private $base_url_sandbox = 'https://sandbox.asaas.com/api/v3';
 
     public function __construct()
     {
