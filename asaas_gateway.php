@@ -94,7 +94,7 @@ function asaas_gateway_invoice_added_hook($invoice_id)
 
         if(!$gateway) return;
 
-        $CI->asaas_lib->set_api_key($gateway['instance']->getSetting('api_key'));
+        $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting('api_key')));
         $CI->asaas_lib->set_sandbox($gateway['instance']->getSetting('sandbox'));
 
         $auth = $CI->db->get_where(db_prefix() . 'asaas_pix_auth', ['client_id' => $invoice->clientid, 'status' => 'ACTIVE'])->row();

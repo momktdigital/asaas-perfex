@@ -34,8 +34,6 @@ class Asaas_lib
             'User-Agent: PerfexCRM-AsaasModule/1.0.0'
         ];
 
-        log_message('error', 'ASAAS DEBUG - API Key passed to cURL: ' . $this->api_key);
-
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
