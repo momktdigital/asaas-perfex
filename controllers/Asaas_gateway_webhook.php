@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Asaas_gateway_webhook extends App_Controller
+class Asaas_gateway_webhook extends ClientsController
 {
     public function notify()
     {
