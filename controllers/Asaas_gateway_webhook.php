@@ -1,7 +1,7 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Asaas_gateway_webhook extends App_Controller
+class Asaas_gateway_webhook extends CI_Controller
 {
     public function __construct()
     {
@@ -26,6 +26,9 @@ class Asaas_gateway_webhook extends App_Controller
                 echo json_encode(['error' => 'Gateway not found']);
                 return;
             }
+
+            // Garante o carregamento da biblioteca de criptografia no controlador puro
+            $this->load->library('encryption');
 
             $is_sandbox = $gateway['instance']->getSetting('sandbox');
             $webhook_field = $is_sandbox == 1 ? 'webhook_token_sandbox' : 'webhook_token_prod';
@@ -86,14 +89,9 @@ class Asaas_gateway_webhook extends App_Controller
             $invoice = $this->invoices_model->get($invoice_id);
             if ($invoice) {
                 // Mark PENDING auth as ACTIVE for this client
-                // Ideally we should match authorization ID but for MVP this links the flow
                 $this->db->where('client_id', $invoice->clientid);
                 $this->db->where('status', 'PENDING');
                 $this->db->update(db_prefix() . 'asaas_pix_auth', ['status' => 'ACTIVE']);
-
-                // We should also record the payment for the invoice!
-                // Because the user paid the first installment/amount.
-                // So we fall through to payment recording logic using the invoice_id.
             } else {
                 return; // Invalid invoice
             }
