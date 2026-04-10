@@ -1,6 +1,5 @@
 <?php
 
-
 defined('BASEPATH') or exit('No direct script access allowed');
 
 /*
@@ -8,7 +7,7 @@ Module Name: Asaas Gateway
 Description: Asaas Payment Gateway for Perfex CRM
 Version: 1.0.0
 Requires at least: 2.3.*
-Author: Jules
+Author: Nonamo
 */
 
 define('ASAAS_GATEWAY_MODULE_NAME', 'asaas_gateway');
@@ -33,7 +32,7 @@ hooks()->add_filter("other_merge_fields_available", "asaas_gateway_register_merg
 hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields", 10, 2);
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
-
+// Filtro CSRF adicionado
 hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
 
 function asaas_gateway_exclude_csrf_webhook($uris)
