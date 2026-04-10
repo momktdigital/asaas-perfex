@@ -34,13 +34,12 @@ hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields"
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
 
-hooks()->add_filter('csrf_exceptions', 'asaas_gateway_csrf_exceptions');
+hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
 
-function asaas_gateway_csrf_exceptions($exceptions)
+function asaas_gateway_exclude_csrf_webhook($uris)
 {
-    $exceptions[] = 'asaas_gateway/webhook/notify';
-    $exceptions[] = 'asaas_gateway/webhook/asaas';
-    return $exceptions;
+    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify';
+    return $uris;
 }
 
 function asaas_gateway_admin_invoice_footer()
