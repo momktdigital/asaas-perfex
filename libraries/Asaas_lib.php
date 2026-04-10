@@ -144,4 +144,14 @@ class Asaas_lib
     {
         return $this->request('/pix/automatic/authorizations/' . $id, 'GET');
     }
+
+    public function create_invoice($data)
+    {
+        return $this->request('/invoices', 'POST', $data);
+    }
+
+    public function get_invoices_by_external_reference($externalReference)
+    {
+        return $this->request('/invoices', 'GET', ['externalReference' => $externalReference]);
+    }
 }

@@ -83,6 +83,16 @@ class Asaas_gateway_module extends App_gateway
                 'default' => '1',
             ],
             [
+                'name' => 'nfe_codigo_servico',
+                'label' => 'Código de Serviço Municipal (NFS-e)',
+                'type' => 'input',
+            ],
+            [
+                'name' => 'nfe_descricao_padrao',
+                'label' => 'Descrição Padrão da NFS-e',
+                'type' => 'textarea',
+            ],
+            [
                 'name' => 'currencies',
                 'label' => 'settings_paymentmethod_currencies',
                 'default' => 'BRL',
