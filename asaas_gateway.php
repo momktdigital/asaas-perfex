@@ -32,12 +32,12 @@ hooks()->add_filter("other_merge_fields_available", "asaas_gateway_register_merg
 hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields", 10, 2);
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
-// Filtro CSRF adicionado
 hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
 
 function asaas_gateway_exclude_csrf_webhook($uris)
 {
-    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify';
+    // AQUI ESTÁ O AJUSTE COM O CURINGA .*
+    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify.*';
     return $uris;
 }
 
@@ -94,8 +94,6 @@ function asaas_gateway_admin_invoice_footer()
         </script>';
     }
 }
-
-hooks()->add_filter('invoice_html_view_data', 'asaas_gateway_inject_payment_button');
 
 function asaas_gateway_inject_payment_button($data)
 {
