@@ -53,3 +53,37 @@ Para que as faturas sejam marcadas como "Paga" automaticamente no Perfex, é ess
 7.  **Eventos:** Selecione, no mínimo, `PAYMENT_RECEIVED` e `PAYMENT_CONFIRMED`.
 8.  **Fila de envio:** Selecione "Sequencial".
 9.  Salve a configuração. O Asaas gerará um **Token de Interceptação**. Copie este token e cole no campo "Token Webhook (Produção)" ou "Token Webhook (Sandbox)" nas configurações do gateway no Perfex, dependendo do ambiente que você configurou.
+
+## Erro 403 Forbidden no Webhook do Asaas (Bloqueio CSRF)
+
+### Descrição do Problema
+Ao configurar as notificações de pagamento do Asaas no Perfex CRM, os disparos de webhook podem falhar com o **Status Code: 403 (Forbidden)**. 
+
+Isso ocorre devido à proteção nativa de **CSRF (Cross-Site Request Forgery)** do CodeIgniter (framework base do Perfex). Como os webhooks do Asaas são requisições POST externas, eles não possuem os *cookies* de sessão ou o *token* de formulário exigidos pelo sistema, fazendo com que a aplicação rejeite a conexão automaticamente.
+
+### Solução
+Para permitir o recebimento dos *payloads*, é necessário declarar a rota do webhook na *whitelist* (lista de exclusão) do CSRF no arquivo principal de configuração do Perfex.
+
+### Como Aplicar a Correção (Passo a Passo)
+
+1. Acesse o servidor onde o Perfex CRM está hospedado.
+2. Navegue até o diretório de configurações e abra o arquivo:
+   `application/config/config.php`
+3. Localize o array de exclusão de rotas, chamado `$config['csrf_exclude_uris']`.
+4. Adicione a rota do módulo Asaas na lista de exceções, utilizando o curinga `.*` no final.
+
+**Exemplo de como o código deve ficar:**
+
+```php
+// application/config/config.php
+
+$config['csrf_exclude_uris'] = [
+    'forms/wtl/[0-9a-z]+', 
+    'forms/ticket', 
+    'forms/quote/[0-9a-z]+', 
+    'admin/tasks/timer_tracking', 
+    'api\/.+', 
+    'razorpay/success\/.+',
+    // Adicione a linha abaixo:
+    'asaas_gateway/asaas_gateway_webhook/notify.*' 
+];
