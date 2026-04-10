@@ -125,7 +125,27 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
 
-        $charge_res = $this->asaas_lib->create_charge($charge_data);
+        // Check if charge already exists
+        $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
+        $charge_id = null;
+
+        if ($existing_charges['success'] && !empty($existing_charges['data']['data'])) {
+            // Find a pending charge
+            foreach ($existing_charges['data']['data'] as $ec) {
+                if ($ec['status'] == 'PENDING') {
+                    $charge_id = $ec['id'];
+                    break;
+                }
+            }
+        }
+
+        if ($charge_id) {
+            // Update existing
+            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        } else {
+            // Create new
+            $charge_res = $this->asaas_lib->create_charge($charge_data);
+        }
 
         // Clear sensitive data
         unset($data);
@@ -170,7 +190,27 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
 
-        $charge_res = $this->asaas_lib->create_charge($charge_data);
+        // Check if charge already exists
+        $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
+        $charge_id = null;
+
+        if ($existing_charges['success'] && !empty($existing_charges['data']['data'])) {
+            // Find a pending charge
+            foreach ($existing_charges['data']['data'] as $ec) {
+                if ($ec['status'] == 'PENDING') {
+                    $charge_id = $ec['id'];
+                    break;
+                }
+            }
+        }
+
+        if ($charge_id) {
+            // Update existing
+            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        } else {
+            // Create new
+            $charge_res = $this->asaas_lib->create_charge($charge_data);
+        }
 
         if($charge_res['success']) {
             // Get QR Code
@@ -221,7 +261,27 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
 
-        $charge_res = $this->asaas_lib->create_charge($charge_data);
+        // Check if charge already exists
+        $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
+        $charge_id = null;
+
+        if ($existing_charges['success'] && !empty($existing_charges['data']['data'])) {
+            // Find a pending charge
+            foreach ($existing_charges['data']['data'] as $ec) {
+                if ($ec['status'] == 'PENDING') {
+                    $charge_id = $ec['id'];
+                    break;
+                }
+            }
+        }
+
+        if ($charge_id) {
+            // Update existing
+            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        } else {
+            // Create new
+            $charge_res = $this->asaas_lib->create_charge($charge_data);
+        }
 
         if($charge_res['success']) {
             echo json_encode(['success' => true, 'bankSlipUrl' => $charge_res['data']['bankSlipUrl']]);
@@ -246,34 +306,11 @@ class Client extends ClientsController
         }
         $customer_id = $customer_res['id'];
 
-        // Determine Frequency
-        $frequency = 'MONTHLY'; // Default
-        if (isset($invoice->recurring_type) && isset($invoice->custom_recurring)) {
-             if ($invoice->recurring == 1 && $invoice->recurring_type == 'weeks') {
-                 $frequency = 'WEEKLY';
-             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'months') {
-                 $frequency = 'MONTHLY';
-             } else if ($invoice->recurring == 6 && $invoice->recurring_type == 'months') {
-                 $frequency = 'SEMIANNUALLY';
-             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'years') {
-                 $frequency = 'YEARLY';
-             } else if ($invoice->recurring == 12 && $invoice->recurring_type == 'months') {
-                 $frequency = 'YEARLY';
-             }
-        } else if (isset($invoice->recurring)) {
-             // Basic fallback for older perfex versions if recurring_type isn't set,
-             // recurring is usually number of months.
-             if ($invoice->recurring == 1) $frequency = 'MONTHLY';
-             if ($invoice->recurring == 6) $frequency = 'SEMIANNUALLY';
-             if ($invoice->recurring == 12) $frequency = 'YEARLY';
-        }
-
         $auth_data = [
             'customer' => $customer_id,
             'value' => $invoice->total,
             'description' => 'Pix Automatico for Recurring Invoice',
-            'externalReference' => 'auth_' . $invoice->id,
-            'frequency' => $frequency
+            'externalReference' => 'auth_' . $invoice->id
         ];
 
         $res = $this->asaas_lib->create_pix_auth($auth_data);
