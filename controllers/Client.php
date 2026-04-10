@@ -22,8 +22,10 @@ class Client extends ClientsController
         }
 
         if ($gateway) {
-            $this->asaas_lib->set_api_key($this->encryption->decrypt($gateway['instance']->getSetting('api_key')));
-            $this->asaas_lib->set_sandbox($gateway['instance']->getSetting('sandbox'));
+            $is_sandbox = $gateway['instance']->getSetting('sandbox');
+            $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+            $this->asaas_lib->set_api_key($this->encryption->decrypt($gateway['instance']->getSetting($api_key_field)));
+            $this->asaas_lib->set_sandbox($is_sandbox);
         }
 
         $this->lang->load('asaas_gateway/asaas_gateway');

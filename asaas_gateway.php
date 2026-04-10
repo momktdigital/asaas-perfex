@@ -143,8 +143,10 @@ function asaas_gateway_invoice_added_hook($invoice_id)
 
         if(!$gateway) return;
 
-        $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting('api_key')));
-        $CI->asaas_lib->set_sandbox($gateway['instance']->getSetting('sandbox'));
+        $is_sandbox = $gateway['instance']->getSetting('sandbox');
+        $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+        $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting($api_key_field)));
+        $CI->asaas_lib->set_sandbox($is_sandbox);
 
         $auth = $CI->db->get_where(db_prefix() . 'asaas_pix_auth', ['client_id' => $invoice->clientid, 'status' => 'ACTIVE'])->row();
 
@@ -235,8 +237,10 @@ function asaas_gateway_delete_pending_charges($invoice_id)
     if(!$gateway) return;
 
     $CI->load->library('asaas_gateway/asaas_lib');
-    $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting('api_key')));
-    $CI->asaas_lib->set_sandbox($gateway['instance']->getSetting('sandbox'));
+    $is_sandbox = $gateway['instance']->getSetting('sandbox');
+    $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+    $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting($api_key_field)));
+    $CI->asaas_lib->set_sandbox($is_sandbox);
 
     // Get all charges for this invoice
     $charges_res = $CI->asaas_lib->get_charges_by_external_reference($invoice_id);
