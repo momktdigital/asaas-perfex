@@ -1,13 +1,18 @@
 <?php
 defined('BASEPATH') or exit('No direct script access allowed');
 
-class Asaas_gateway_webhook extends ClientsController
+class Asaas_gateway_webhook extends App_Controller
 {
+    public function __construct()
+    {
+        parent::__construct();
+    }
+
     public function notify()
     {
         try {
             $this->load->model('payment_modes_model');
-        $gateways = $this->payment_modes_model->get('', ['active' => 1]);
+            $gateways = $this->payment_modes_model->get('', ['active' => 1]);
             $gateway = null;
             foreach ($gateways as $g) {
                 if ($g['id'] == 'asaas_gateway') {
