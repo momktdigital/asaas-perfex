@@ -98,6 +98,16 @@ class Asaas_lib
         return $this->request('/payments/' . $id, 'GET');
     }
 
+    public function update_charge($id, $data)
+    {
+        return $this->request('/payments/' . $id, 'PUT', $data);
+    }
+
+    public function get_charges_by_external_reference($externalReference)
+    {
+        return $this->request('/payments', 'GET', ['externalReference' => $externalReference]);
+    }
+
     public function delete_charge($id)
     {
         return $this->request('/payments/' . $id, 'DELETE');
