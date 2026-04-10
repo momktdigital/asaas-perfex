@@ -25,9 +25,15 @@ class Asaas_gateway_module extends App_gateway
          */
         $this->setSettings([
             [
-                'name' => 'api_key',
+                'name' => 'api_key_prod',
                 'encrypted' => true,
-                'label' => 'asaas_api_key',
+                'label' => 'Chave de API (Produção)',
+                'type' => 'input',
+            ],
+            [
+                'name' => 'api_key_sandbox',
+                'encrypted' => true,
+                'label' => 'Chave de API (Sandbox)',
                 'type' => 'input',
             ],
             [
