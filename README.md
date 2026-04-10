@@ -48,7 +48,7 @@ Para que as faturas sejam marcadas como "Paga" automaticamente no Perfex, é ess
 2.  Vá em **Configurações > Integrações > Webhooks**.
 3.  Clique em **Adicionar Webhook** para "Cobranças".
 4.  **Nome:** "Perfex CRM" (ou qualquer outro de sua preferência).
-5.  **URL:** `https://SEU_DOMINIO_DO_PERFEX.com/asaas_gateway/webhook/asaas`
+5.  **URL:** `https://SEU_DOMINIO_DO_PERFEX.com/asaas_gateway/asaas_gateway_webhook/notify`
 6.  **E-mail para notificações:** Seu e-mail.
 7.  **Eventos:** Selecione, no mínimo, `PAYMENT_RECEIVED` e `PAYMENT_CONFIRMED`.
 8.  **Fila de envio:** Selecione "Sequencial".
