@@ -11,28 +11,16 @@ class Asaas_gateway_webhook extends CI_Controller
     public function notify()
     {
         try {
-            $this->load->model('payment_modes_model');
-            $gateways = $this->payment_modes_model->get('', ['active' => 1]);
-            $gateway = null;
-            foreach ($gateways as $g) {
-                if ($g['id'] == 'asaas_gateway') {
-                    $gateway = $g;
-                    break;
-                }
-            }
-
-            if (!$gateway) {
-                header("HTTP/1.1 500 Internal Server Error");
-                echo json_encode(['error' => 'Gateway not found']);
-                return;
-            }
-
-            // Garante o carregamento da biblioteca de criptografia no controlador puro
+            // Carrega a library do gateway diretamente em vez de fazer loop no banco
+            $this->load->library('asaas_gateway/asaas_gateway_module');
             $this->load->library('encryption');
 
-            $is_sandbox = $gateway['instance']->getSetting('sandbox');
+            $is_sandbox = $this->asaas_gateway_module->getSetting('sandbox');
             $webhook_field = $is_sandbox == 1 ? 'webhook_token_sandbox' : 'webhook_token_prod';
-            $token = $this->encryption->decrypt($gateway['instance']->getSetting($webhook_field));
+            
+            $encrypted_token = $this->asaas_gateway_module->getSetting($webhook_field);
+            $token = $encrypted_token ? $this->encryption->decrypt($encrypted_token) : '';
+            
             $headers = $this->input->request_headers();
             $incoming_token = '';
 
@@ -43,8 +31,8 @@ class Asaas_gateway_webhook extends CI_Controller
                 }
             }
 
-            if ($token !== $incoming_token || empty($token)) {
-                log_activity('Asaas Webhook Failed: Invalid Token');
+            if ($token !== $incoming_token || empty($token) || empty($incoming_token)) {
+                log_activity('Asaas Webhook Failed: Invalid Token.');
                 header("HTTP/1.1 401 Unauthorized");
                 echo json_encode(['error' => 'Invalid Token']);
                 return;
@@ -140,55 +128,44 @@ class Asaas_gateway_webhook extends CI_Controller
 
             if ($cv && ($cv->value == 'Sim' || $cv->value == '1')) {
                 $this->load->library('asaas_gateway/asaas_lib');
+                $this->load->library('asaas_gateway/asaas_gateway_module');
 
-                $this->load->model('payment_modes_model');
-                $gateways = $this->payment_modes_model->get('', ['active' => 1]);
-                $gateway = null;
-                foreach ($gateways as $g) {
-                    if ($g['id'] == 'asaas_gateway') {
-                        $gateway = $g;
-                        break;
-                    }
-                }
+                $is_sandbox = $this->asaas_gateway_module->getSetting('sandbox');
+                $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+                $this->asaas_lib->set_api_key($this->encryption->decrypt($this->asaas_gateway_module->getSetting($api_key_field)));
+                $this->asaas_lib->set_sandbox($is_sandbox);
 
-                if($gateway) {
-                    $is_sandbox = $gateway['instance']->getSetting('sandbox');
-                    $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
-                    $this->asaas_lib->set_api_key($this->encryption->decrypt($gateway['instance']->getSetting($api_key_field)));
-                    $this->asaas_lib->set_sandbox($is_sandbox);
+                $this->load->model('invoices_model');
+                $invoice = $this->invoices_model->get($invoice_id);
 
-                    $this->load->model('invoices_model');
-                    $invoice = $this->invoices_model->get($invoice_id);
+                $this->load->model('clients_model');
+                $client = $this->clients_model->get($invoice->clientid);
+                $contact = $this->clients_model->get_contact(get_primary_contact_user_id($client->userid));
 
-                    $this->load->model('clients_model');
-                    $client = $this->clients_model->get($invoice->clientid);
-                    $contact = $this->clients_model->get_contact(get_primary_contact_user_id($client->userid));
+                // Sync customer
+                $customer_data = [
+                    'name' => $client->company,
+                    'email' => $contact ? $contact->email : '',
+                    'cpfCnpj' => $client->vat,
+                    'phone' => $contact && !empty($contact->phonenumber) ? $contact->phonenumber : $client->phonenumber,
+                    'externalReference' => $client->userid
+                ];
+                $customer_id = $this->asaas_lib->create_or_update_customer($customer_data);
 
-                    // Sync customer
-                    $customer_data = [
-                        'name' => $client->company,
-                        'email' => $contact ? $contact->email : '',
-                        'cpfCnpj' => $client->vat,
-                        'phone' => $contact && !empty($contact->phonenumber) ? $contact->phonenumber : $client->phonenumber,
-                        'externalReference' => $client->userid
+                if($customer_id) {
+                    $codigo_servico = $this->asaas_gateway_module->getSetting('nfe_codigo_servico');
+                    $descricao = $this->asaas_gateway_module->getSetting('nfe_descricao_padrao');
+                    if(empty($descricao)) $descricao = 'Fatura #' . $invoice->number;
+
+                    $nfe_data = [
+                        'customer' => $customer_id,
+                        'serviceDescription' => $descricao,
+                        'municipalServiceCode' => $codigo_servico,
+                        'value' => $value,
+                        'externalReference' => $invoice_id
                     ];
-                    $customer_id = $this->asaas_lib->create_or_update_customer($customer_data);
 
-                    if($customer_id) {
-                        $codigo_servico = $gateway['instance']->getSetting('nfe_codigo_servico');
-                        $descricao = $gateway['instance']->getSetting('nfe_descricao_padrao');
-                        if(empty($descricao)) $descricao = 'Fatura #' . $invoice->number;
-
-                        $nfe_data = [
-                            'customer' => $customer_id,
-                            'serviceDescription' => $descricao,
-                            'municipalServiceCode' => $codigo_servico,
-                            'value' => $value,
-                            'externalReference' => $invoice_id
-                        ];
-
-                        $this->asaas_lib->create_invoice($nfe_data);
-                    }
+                    $this->asaas_lib->create_invoice($nfe_data);
                 }
             }
         }
