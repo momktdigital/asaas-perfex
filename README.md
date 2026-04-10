@@ -1,53 +1,55 @@
-# Módulo Asaas Gateway para Perfex CRM
+# Asaas Gateway Module for Perfex CRM
 
-Solução desenvolvida por **Nonamo** - [https://nonamo.com.br](https://nonamo.com.br)
+Este módulo integra o gateway de pagamento Asaas ao Perfex CRM, permitindo pagamentos via Pix, Boleto e Cartão de Crédito. Ele suporta tanto o ambiente de Produção quanto o Sandbox (para testes).
 
-Este módulo integra o Perfex CRM à API v3 do Asaas, fornecendo uma solução de pagamento altamente profissional, segura e totalmente nativa, sem redirecionamentos externos e com suporte completo a assinaturas e estornos diretos pelo painel administrativo.
+## Funcionalidades
+*   **Pix:** Geração de QR Code e código copia e cola nativos na tela de fatura do Perfex.
+*   **Boleto:** Link direto para a fatura gerada no Asaas.
+*   **Cartão de Crédito:** Formulário de pagamento na própria tela da fatura, sem redirecionamento para fora do seu CRM. Permite parcelamento em até 12x.
+*   **Pix Automático (Assinaturas):** Permite a autorização de débitos automáticos via Pix.
+*   **Webhooks:** Atualização automática do status da fatura no Perfex CRM quando o pagamento é recebido no Asaas.
+*   **Ambiente Duplo (Produção / Sandbox):** Chaves de API, tokens de webhook e IDs de Carteira (Wallet ID) configuráveis separadamente para produção e ambiente de testes. Alternância com um único clique.
+*   **Configuração de Split:** Permite divisão de pagamentos (split) utilizando uma configuração em formato JSON diretamente nas configurações do módulo.
+*   **Sincronização de Clientes:** Cria ou atualiza automaticamente o cliente no Asaas para manter os dados sincronizados.
+*   **Multa e Juros:** Permite configurar a porcentagem de multa por atraso e juros ao mês.
+*   **Estorno no Asaas:** Botão na área administrativa da fatura para estornar um pagamento processado via Asaas.
+*   **Sincronização de Cancelamentos:** Deleta as cobranças geradas no Asaas automaticamente se a fatura for cancelada ou apagada no Perfex CRM.
 
-## Funcionalidades e Diferenciais
-- **Checkout Transparente Premium:** Interface de pagamento limpa, moderna (Card Layout) hospedada no seu próprio Perfex CRM, evitando que o cliente perca confiança ao ser redirecionado.
-- **Multa e Juros Nativos:** As cobranças geradas no Asaas herdam os percentuais de multa e juros definidos nas configurações do Gateway, sem precisar criar configurações avulsas de atraso.
-- **Cobranças Automáticas (Boletos/Pix):** Assim que uma fatura é criada no Perfex CRM, o módulo cria uma cobrança base (Link de Pagamento) no Asaas e anexa o link dinâmico ao PDF e corpo dos E-mails da fatura.
-- **Assinaturas Mensais (Subscriptions):** Clientes com faturas recorrentes no Perfex podem assinar o Pix Automático ou "Salvar o Cartão". O módulo criará uma `Subscription` real no Asaas, aprovando cobranças automatizadas todo mês e quitando a fatura no Perfex via Webhook.
-- **Sincronização de Cancelamento:** Se uma fatura for cancelada ou excluída no Perfex CRM, o módulo apaga a cobrança pendente/vencida equivalente lá no Asaas (evitando boletos "fantasmas" no DDA do cliente).
-- **Gestão de Assinaturas no Admin:** Uma nova aba "Assinaturas" é adicionada ao Perfil do Cliente, permitindo que os administradores visualizem e cancelem as assinaturas ativas no Asaas com 1 clique.
-- **Estorno Fácil:** Faturas pagas exibem um botão de "Estornar no Asaas" no canto superior direito do Painel Administrativo.
-- **Divisão de Pagamentos (Split):** Permite transferir parte do valor (fixo ou percentual) recebido direto para a carteira Asaas de parceiros/sócios automaticamente.
+## Instalação
 
-## Requisitos
-- Perfex CRM 3.x ou superior.
-- PHP 7.4, 8.0, ou 8.1.
-- Extensão `curl` habilitada no servidor.
-- Cadastro aprovado na plataforma Asaas (ou Asaas Sandbox para testes).
+1.  Faça o download do arquivo `.zip` deste repositório.
+2.  Extraia o conteúdo para a pasta `modules/` do seu Perfex CRM.
+    *   **IMPORTANTE:** A pasta do módulo deve se chamar **exatamente** `asaas_gateway`. Se o arquivo extraído tiver outro nome (ex: `perfex-asaas-main`), renomeie a pasta para `asaas_gateway`.
+3.  Acesse o Perfex CRM como Administrador.
+4.  Vá em **Configurações > Módulos** e clique em "Instalar/Ativar" no módulo "Asaas".
 
-## Como Instalar e Configurar
+## Configuração
 
-1. Envie a pasta `asaas_gateway` para o diretório `modules/` do seu Perfex CRM.
-2. Acesse **Configurações > Módulos** no Perfex CRM e ative o "Asaas Gateway".
-3. Acesse **Configurações > Opções > Gateways de Pagamento > Asaas**.
-4. Configure os seguintes campos:
-   - **Chave de API (Produção):** Insira a API Key gerada na sua conta oficial Asaas.
-   - **Chave de API (Sandbox):** Insira a API Key gerada na sua conta [Sandbox do Asaas](https://sandbox.asaas.com) (usada caso marque o modo sandbox).
-   - **Modo Sandbox:** Marque `Sim` para usar o ambiente de testes ou `Não` para transacionar valores reais.
-   - **Token Webhook (Produção):** Crie uma senha segura para a conta oficial (ex: `MeuWebhookSecreto2026`).
-   - **Token Webhook (Sandbox):** Crie uma senha segura para a conta de testes.
-   - **Multa por atraso (%):** A porcentagem a ser cobrada caso a fatura atrase (Padrão: 2%).
-   - **Juros ao mês (%):** A porcentagem de juros pró-rata cobrada por mês de atraso (Padrão: 1%).
-   - **Configuração de Split (JSON):** (Opcional) Array JSON com as regras de repasse.
+1.  Vá em **Configurações > Pagamentos > Gateways de Pagamento**.
+2.  Selecione a aba **Asaas**.
+3.  Preencha as seguintes configurações:
+    *   **Chave de API (Produção):** Sua chave de API de produção do Asaas.
+    *   **Chave de API (Sandbox):** Sua chave de API de testes do Asaas (Sandbox).
+    *   **Modo Sandbox (Teste):** Marque como "Sim" para testar o sistema. Quando "Sim", o módulo usará a Chave de API, Token Webhook e Wallet ID do Sandbox.
+    *   **Token Webhook (Produção):** O Token gerado ao configurar o webhook no ambiente de produção do Asaas.
+    *   **Token Webhook (Sandbox):** O Token gerado ao configurar o webhook no ambiente Sandbox do Asaas.
+    *   **ID da Carteira (Produção):** O ID da sua carteira no Asaas (Produção).
+    *   **ID da Carteira (Sandbox):** O ID da sua carteira no Asaas (Sandbox).
+    *   **Configuração de Split (JSON):** Configuração em JSON para divisão de pagamentos (Opcional). Exemplo: `[{"walletId": "ID_DA_CARTEIRA_A_RECEBER", "percentage": 10}]`.
+    *   **Multa por atraso (%):** Porcentagem aplicada como multa após o vencimento (Ex: `2`).
+    *   **Juros ao mês (%):** Porcentagem aplicada como juros mensais após o vencimento (Ex: `1`).
+    *   **Moedas Permitidas:** `BRL`.
 
-## Como Configurar o Webhook no Asaas
+## Configuração do Webhook no Asaas
 
-O Webhook é crucial para que o Perfex CRM saiba quando o cliente pagou a fatura, e a marque como "Paga" automaticamente.
+Para que as faturas sejam marcadas como "Paga" automaticamente no Perfex, é essencial configurar o Webhook no painel do Asaas.
 
-1. Acesse sua conta Asaas (Produção ou Sandbox).
-2. Vá em **Minha Conta > Integrações > Webhooks**.
-3. Em **URL do Webhook**, cole o seguinte endereço (substitua `seu-crm.com.br` pelo domínio do seu Perfex):
-   `https://seu-crm.com.br/asaas_gateway/webhook/notify`
-4. Em **Token de Interação**, cole exatamente a mesma senha que você digitou no campo "Token Webhook (Produção)" ou "Token Webhook (Sandbox)" (dependendo do ambiente que estiver configurando).
-5. Marque para enviar eventos de **Cobranças** (`PAYMENT_RECEIVED`, etc).
-6. Salve. O Webhook deve entrar em fila ou ser ativado.
-
-## Regras de Cartão e Pix (Recorrente)
-Para que o botão de "Salvar cartão para pagamentos mensais" ou "Assinar Pix Mensal Automático" apareçam para o cliente:
-- A fatura atual gerada no Perfex CRM **DEVE estar configurada como "Recorrente"** (ex: Todo 1 Mês).
-- Se a fatura não for recorrente, as opções de pagamento atuarão apenas para a cobrança daquele mês.
+1.  Acesse seu painel Asaas (Produção ou Sandbox, dependendo de qual deseja configurar).
+2.  Vá em **Configurações > Integrações > Webhooks**.
+3.  Clique em **Adicionar Webhook** para "Cobranças".
+4.  **Nome:** "Perfex CRM" (ou qualquer outro de sua preferência).
+5.  **URL:** `https://SEU_DOMINIO_DO_PERFEX.com/asaas_gateway/webhook/asaas`
+6.  **E-mail para notificações:** Seu e-mail.
+7.  **Eventos:** Selecione, no mínimo, `PAYMENT_RECEIVED` e `PAYMENT_CONFIRMED`.
+8.  **Fila de envio:** Selecione "Sequencial".
+9.  Salve a configuração. O Asaas gerará um **Token de Interceptação**. Copie este token e cole no campo "Token Webhook (Produção)" ou "Token Webhook (Sandbox)" nas configurações do gateway no Perfex, dependendo do ambiente que você configurou.

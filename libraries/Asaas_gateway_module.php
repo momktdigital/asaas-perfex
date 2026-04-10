@@ -55,8 +55,13 @@ class Asaas_gateway_module extends App_gateway
                 'type' => 'input',
             ],
             [
-                'name' => 'wallet_id',
-                'label' => 'asaas_wallet_id',
+                'name' => 'wallet_id_prod',
+                'label' => 'ID da Carteira (Produção)',
+                'type' => 'input',
+            ],
+            [
+                'name' => 'wallet_id_sandbox',
+                'label' => 'ID da Carteira (Sandbox)',
                 'type' => 'input',
             ],
             [
