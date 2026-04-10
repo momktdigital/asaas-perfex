@@ -11,7 +11,26 @@ class Asaas_gateway_webhook extends CI_Controller
     public function notify()
     {
         try {
-            // Carrega a library do gateway diretamente em vez de fazer loop no banco
+            // 1. Lê o payload primeiro
+            $post_data = json_decode(file_get_contents('php://input'), true);
+
+            if (!$post_data || !isset($post_data['event'])) {
+                header("HTTP/1.1 400 Bad Request");
+                echo json_encode(['error' => 'Invalid request payload']);
+                return;
+            }
+
+            $event = $post_data['event'];
+
+            // 2. Intercepta eventos de conta e ignora em silêncio (evita erro 401 de token)
+            // No futuro, você pode adicionar a lógica de subcontas aqui.
+            if (strpos($event, 'ACCOUNT_') === 0) {
+                header("HTTP/1.1 200 OK");
+                echo json_encode(['success' => true, 'message' => 'Account event ignored for now']);
+                return;
+            }
+
+            // 3. Daqui para baixo, exige validação rigorosa de Token (para pagamentos)
             $this->load->library('asaas_gateway/asaas_gateway_module');
             $this->load->library('encryption');
 
@@ -32,21 +51,13 @@ class Asaas_gateway_webhook extends CI_Controller
             }
 
             if ($token !== $incoming_token || empty($token) || empty($incoming_token)) {
-                log_activity('Asaas Webhook Failed: Invalid Token.');
+                log_activity('Asaas Webhook Failed: Invalid Token for Event ' . $event);
                 header("HTTP/1.1 401 Unauthorized");
                 echo json_encode(['error' => 'Invalid Token']);
                 return;
             }
 
-            $post_data = json_decode(file_get_contents('php://input'), true);
-
-            if (!$post_data || !isset($post_data['event'])) {
-                header("HTTP/1.1 400 Bad Request");
-                echo json_encode(['error' => 'Invalid request payload']);
-                return;
-            }
-
-            $event = $post_data['event'];
+            // 4. Processamento do Pagamento
             $payment = isset($post_data['payment']) ? $post_data['payment'] : null;
 
             if ($event == 'PAYMENT_RECEIVED' && $payment) {
