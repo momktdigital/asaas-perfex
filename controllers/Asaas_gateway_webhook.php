@@ -22,7 +22,9 @@ class Asaas_gateway_webhook extends ClientsController
                 return;
             }
 
-            $token = $this->encryption->decrypt($gateway['instance']->getSetting('webhook_token'));
+            $is_sandbox = $gateway['instance']->getSetting('sandbox');
+            $webhook_field = $is_sandbox == 1 ? 'webhook_token_sandbox' : 'webhook_token_prod';
+            $token = $this->encryption->decrypt($gateway['instance']->getSetting($webhook_field));
             $headers = $this->input->request_headers();
             $incoming_token = '';
 

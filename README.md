@@ -29,7 +29,8 @@ Este módulo integra o Perfex CRM à API v3 do Asaas, fornecendo uma solução d
    - **Chave de API (Produção):** Insira a API Key gerada na sua conta oficial Asaas.
    - **Chave de API (Sandbox):** Insira a API Key gerada na sua conta [Sandbox do Asaas](https://sandbox.asaas.com) (usada caso marque o modo sandbox).
    - **Modo Sandbox:** Marque `Sim` para usar o ambiente de testes ou `Não` para transacionar valores reais.
-   - **Token Webhook:** Crie uma senha segura (ex: `MeuWebhookSecreto2026`).
+   - **Token Webhook (Produção):** Crie uma senha segura para a conta oficial (ex: `MeuWebhookSecreto2026`).
+   - **Token Webhook (Sandbox):** Crie uma senha segura para a conta de testes.
    - **Multa por atraso (%):** A porcentagem a ser cobrada caso a fatura atrase (Padrão: 2%).
    - **Juros ao mês (%):** A porcentagem de juros pró-rata cobrada por mês de atraso (Padrão: 1%).
    - **Configuração de Split (JSON):** (Opcional) Array JSON com as regras de repasse.
@@ -42,7 +43,7 @@ O Webhook é crucial para que o Perfex CRM saiba quando o cliente pagou a fatura
 2. Vá em **Minha Conta > Integrações > Webhooks**.
 3. Em **URL do Webhook**, cole o seguinte endereço (substitua `seu-crm.com.br` pelo domínio do seu Perfex):
    `https://seu-crm.com.br/asaas_gateway/webhook/notify`
-4. Em **Token de Interação**, cole exatamente a mesma senha que você digitou no campo "Token Webhook" das configurações do Gateway no Perfex CRM.
+4. Em **Token de Interação**, cole exatamente a mesma senha que você digitou no campo "Token Webhook (Produção)" ou "Token Webhook (Sandbox)" (dependendo do ambiente que estiver configurando).
 5. Marque para enviar eventos de **Cobranças** (`PAYMENT_RECEIVED`, etc).
 6. Salve. O Webhook deve entrar em fila ou ser ativado.
 

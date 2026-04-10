@@ -43,9 +43,15 @@ class Asaas_gateway_module extends App_gateway
                 'default' => 0,
             ],
             [
-                'name' => 'webhook_token',
+                'name' => 'webhook_token_prod',
                 'encrypted' => true,
-                'label' => 'asaas_webhook_token',
+                'label' => 'Token Webhook (Produção)',
+                'type' => 'input',
+            ],
+            [
+                'name' => 'webhook_token_sandbox',
+                'encrypted' => true,
+                'label' => 'Token Webhook (Sandbox)',
                 'type' => 'input',
             ],
             [
