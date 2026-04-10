@@ -54,6 +54,18 @@ class Asaas_gateway_module extends App_gateway
                 // 'description' => 'asaas_split_config_description',
             ],
             [
+                'name' => 'fine_value',
+                'label' => 'Multa por atraso (%)',
+                'type' => 'input',
+                'default' => '2',
+            ],
+            [
+                'name' => 'interest_value',
+                'label' => 'Juros ao mês (%)',
+                'type' => 'input',
+                'default' => '1',
+            ],
+            [
                 'name' => 'currencies',
                 'label' => 'settings_paymentmethod_currencies',
                 'default' => 'BRL',

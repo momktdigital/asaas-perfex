@@ -124,6 +124,7 @@ class Client extends ClientsController
         if($split) {
             $charge_data['split'] = $split;
         }
+        $this->apply_fine_and_interest($charge_data);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -170,6 +171,7 @@ class Client extends ClientsController
                 'externalReference' => 'auth_' . $invoice->id
             ];
             if($split) $sub_data['split'] = $split;
+            $this->apply_fine_and_interest($sub_data);
 
             $charge_res = $this->asaas_lib->create_subscription($sub_data);
 
@@ -229,6 +231,7 @@ class Client extends ClientsController
         if($split) {
             $charge_data['split'] = $split;
         }
+        $this->apply_fine_and_interest($charge_data);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -300,6 +303,7 @@ class Client extends ClientsController
         if($split) {
             $charge_data['split'] = $split;
         }
+        $this->apply_fine_and_interest($charge_data);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -386,6 +390,7 @@ class Client extends ClientsController
         if($split) {
             $sub_data['split'] = $split;
         }
+        $this->apply_fine_and_interest($sub_data);
 
         $res = $this->asaas_lib->create_subscription($sub_data);
 
@@ -461,6 +466,36 @@ class Client extends ClientsController
         log_message('error', 'Asaas Create Customer Failed: ' . print_r($res, true) . ' Data sent: ' . print_r($data, true));
 
         return ['success' => false, 'error' => $res['error']];
+    }
+
+    private function apply_fine_and_interest(&$data)
+    {
+        $this->load->model('payment_modes_model');
+        $gateways = $this->payment_modes_model->get('', ['active' => 1]);
+        $gateway = null;
+        foreach ($gateways as $g) {
+            if ($g['id'] == 'asaas_gateway') {
+                $gateway = $g;
+                break;
+            }
+        }
+        if(!$gateway) return;
+
+        $fine = $gateway['instance']->getSetting('fine_value');
+        $interest = $gateway['instance']->getSetting('interest_value');
+
+        if(is_numeric($fine) && $fine > 0) {
+            $data['fine'] = [
+                'value' => $fine,
+                'type' => 'PERCENTAGE'
+            ];
+        }
+        if(is_numeric($interest) && $interest > 0) {
+            $data['interest'] = [
+                'value' => $interest,
+                'type' => 'PERCENTAGE'
+            ];
+        }
     }
 
     private function get_split_config()

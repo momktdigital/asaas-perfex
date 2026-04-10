@@ -93,6 +93,13 @@ class Asaas_lib
         return $this->request('/payments', 'POST', $data);
     }
 
+    public function refund_charge($id, $value = null)
+    {
+        $data = [];
+        if ($value) $data['value'] = $value;
+        return $this->request('/payments/' . $id . '/refund', 'POST', $data);
+    }
+
     public function get_charge($id)
     {
         return $this->request('/payments/' . $id, 'GET');
