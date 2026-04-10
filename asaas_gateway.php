@@ -1,5 +1,6 @@
 <?php
 
+
 defined('BASEPATH') or exit('No direct script access allowed');
 
 /*
@@ -31,6 +32,16 @@ hooks()->add_filter('customer_profile_tabs', 'asaas_gateway_customer_profile_tab
 hooks()->add_filter("other_merge_fields_available", "asaas_gateway_register_merge_fields");
 hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields", 10, 2);
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
+
+
+hooks()->add_filter('csrf_exceptions', 'asaas_gateway_csrf_exceptions');
+
+function asaas_gateway_csrf_exceptions($exceptions)
+{
+    $exceptions[] = 'asaas_gateway/webhook/notify';
+    $exceptions[] = 'asaas_gateway/webhook/asaas';
+    return $exceptions;
+}
 
 function asaas_gateway_admin_invoice_footer()
 {
