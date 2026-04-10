@@ -147,4 +147,24 @@ class Admin extends AdminController
             echo json_encode(['success' => false, 'error' => 'Cobrança não encontrada no Asaas.']);
         }
     }
+
+    public function check_nfe($invoice_id)
+    {
+        if (!has_permission('invoices', '', 'view')) {
+            echo json_encode(['has_nfe' => false]);
+            return;
+        }
+
+        $nfe_res = $this->asaas_lib->get_invoices_by_external_reference($invoice_id);
+
+        if ($nfe_res['success'] && !empty($nfe_res['data']['data'])) {
+            // Pegar a primeira nota encontrada
+            $nfe = $nfe_res['data']['data'][0];
+            if(isset($nfe['invoiceUrl']) && !empty($nfe['invoiceUrl'])) {
+                echo json_encode(['has_nfe' => true, 'nfe_link' => $nfe['invoiceUrl']]);
+                return;
+            }
+        }
+        echo json_encode(['has_nfe' => false]);
+    }
 }

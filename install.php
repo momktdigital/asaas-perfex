@@ -15,3 +15,21 @@ if (!$CI->db->table_exists(db_prefix() . 'asaas_pix_auth')) {
         KEY `authorization_id` (`authorization_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=' . $CI->db->char_set . ';');
 }
+
+// Add Custom Field for NFS-e automatic emission if not exists
+$CI->db->where('name', 'Emitir NF-e Automática no Asaas?');
+$CI->db->where('fieldto', 'invoice');
+$cf = $CI->db->get(db_prefix() . 'customfields')->row();
+
+if (!$cf) {
+    $CI->db->insert(db_prefix() . 'customfields', [
+        'fieldto' => 'invoice',
+        'name' => 'Emitir NF-e Automática no Asaas?',
+        'type' => 'select',
+        'options' => 'Não,Sim',
+        'active' => 1,
+        'show_on_pdf' => 0,
+        'show_on_client_portal' => 0,
+        'show_on_table' => 0
+    ]);
+}

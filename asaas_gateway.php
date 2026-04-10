@@ -1,4 +1,5 @@
 <?php
+
 defined('BASEPATH') or exit('No direct script access allowed');
 
 /*
@@ -27,6 +28,8 @@ hooks()->add_action('after_invoice_added', 'asaas_gateway_invoice_added_hook');
 hooks()->add_action('invoice_marked_as_cancelled', 'asaas_gateway_invoice_cancelled_hook');
 hooks()->add_action('before_invoice_deleted', 'asaas_gateway_invoice_deleted_hook');
 hooks()->add_filter('customer_profile_tabs', 'asaas_gateway_customer_profile_tabs');
+hooks()->add_filter("other_merge_fields_available", "asaas_gateway_register_merge_fields");
+hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields", 10, 2);
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
 function asaas_gateway_admin_invoice_footer()
@@ -48,6 +51,15 @@ function asaas_gateway_admin_invoice_footer()
                             if(invoiceId && $("#asaas_refund_btn").length == 0) {
                                 var btnHtml = \'<a href="#" id="asaas_refund_btn" class="btn btn-warning pull-right mleft5" onclick="refundAsaasPayment(\' + invoiceId + \'); return false;"><i class="fa fa-undo"></i> Estornar no Asaas</a>\';
                                 $(".invoice-html-status-container").parent().append(btnHtml);
+
+                                // Check for NFE
+                                $.get(admin_url + "asaas_gateway/admin/check_nfe/" + invoiceId, function(res) {
+                                    var nfeData = JSON.parse(res);
+                                    if(nfeData.has_nfe && nfeData.nfe_link) {
+                                        var nfeBtn = \'<a href="\' + nfeData.nfe_link + \'" target="_blank" class="btn btn-info pull-right mleft5"><i class="fa fa-file-pdf-o"></i> Visualizar NF-e (Asaas)</a>\';
+                                        $(".invoice-html-status-container").parent().append(nfeBtn);
+                                    }
+                                });
                             }
                         }
                     }, 500);
@@ -267,4 +279,46 @@ function asaas_gateway_customer_profile_tabs($tabs)
         'position' => 90,
     ];
     return $tabs;
+}
+
+function asaas_gateway_register_merge_fields($fields)
+{
+    $fields[] = [
+        'name' => 'Link da NF-e (Asaas)',
+        'key' => '{asaas_nfe_link}',
+        'available' => [
+            'invoice',
+        ],
+    ];
+    return $fields;
+}
+
+function asaas_gateway_invoice_merge_fields($fields, $invoice_id)
+{
+    $nfe_link = '';
+    $CI = &get_instance();
+    $CI->load->library('asaas_gateway/asaas_lib');
+
+    $CI->load->model('payment_modes_model');
+    $gateways = $CI->payment_modes_model->get('', ['active' => 1]);
+    foreach ($gateways as $g) {
+        if ($g['id'] == 'asaas_gateway') {
+            $is_sandbox = $g['instance']->getSetting('sandbox');
+            $api_key_field = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+            $CI->asaas_lib->set_api_key($CI->encryption->decrypt($g['instance']->getSetting($api_key_field)));
+            $CI->asaas_lib->set_sandbox($is_sandbox);
+
+            $nfe_res = $CI->asaas_lib->get_invoices_by_external_reference($invoice_id);
+            if ($nfe_res['success'] && !empty($nfe_res['data']['data'])) {
+                $nfe = $nfe_res['data']['data'][0];
+                if(isset($nfe['invoiceUrl']) && !empty($nfe['invoiceUrl'])) {
+                    $nfe_link = '<a href="'.$nfe['invoiceUrl'].'" target="_blank">Visualizar Nota Fiscal</a>';
+                }
+            }
+            break;
+        }
+    }
+
+    $fields['{asaas_nfe_link}'] = $nfe_link;
+    return $fields;
 }
