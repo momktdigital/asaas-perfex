@@ -24,6 +24,55 @@ register_language_files(ASAAS_GATEWAY_MODULE_NAME, [ASAAS_GATEWAY_MODULE_NAME]);
 register_payment_gateway('asaas_gateway_module', 'asaas_gateway');
 
 hooks()->add_action('after_invoice_added', 'asaas_gateway_invoice_added_hook');
+hooks()->add_action('invoice_marked_as_cancelled', 'asaas_gateway_invoice_cancelled_hook');
+hooks()->add_action('before_invoice_deleted', 'asaas_gateway_invoice_deleted_hook');
+hooks()->add_filter('customer_profile_tabs', 'asaas_gateway_customer_profile_tabs');
+hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
+
+function asaas_gateway_admin_invoice_footer()
+{
+    $CI = &get_instance();
+    $uri = $CI->uri->uri_string();
+
+    if (strpos($uri, 'invoices/list_invoices/') !== false || strpos($uri, 'invoices/invoice/') !== false || strpos($uri, 'invoices#') !== false) {
+        echo '<script>
+        $(function() {
+            // Check if we are viewing an invoice
+            $(document).ajaxComplete(function(event, xhr, settings) {
+                if (settings.url.indexOf("invoices/get_invoice_data_ajax") !== -1) {
+                    // Check if it has asaas_gateway payment
+                    setTimeout(function() {
+                        var hasAsaasPayment = $(".invoice-html-payment-modes").text().indexOf("Asaas") !== -1 || $(".table-invoice-payments").text().indexOf("Asaas") !== -1;
+                        if(hasAsaasPayment && $(".invoice-status-bg-paid").length > 0) {
+                            var invoiceId = $("input[name=\'invoiceid\']").val();
+                            if(invoiceId && $("#asaas_refund_btn").length == 0) {
+                                var btnHtml = \'<a href="#" id="asaas_refund_btn" class="btn btn-warning pull-right mleft5" onclick="refundAsaasPayment(\' + invoiceId + \'); return false;"><i class="fa fa-undo"></i> Estornar no Asaas</a>\';
+                                $(".invoice-html-status-container").parent().append(btnHtml);
+                            }
+                        }
+                    }, 500);
+                }
+            });
+        });
+
+        function refundAsaasPayment(invoiceId) {
+            if(confirm("Tem certeza que deseja estornar totalmente este pagamento no Asaas? O valor será devolvido ao cliente e a cobrança será marcada como estornada.")) {
+                $.post(admin_url + "asaas_gateway/admin/refund_payment", { invoice_id: invoiceId }, function(response) {
+                    response = JSON.parse(response);
+                    if(response.success) {
+                        alert_float("success", "Pagamento estornado com sucesso no Asaas!");
+                        window.location.reload();
+                    } else {
+                        alert_float("danger", "Erro ao estornar: " + response.error);
+                    }
+                }).fail(function() {
+                    alert_float("danger", "Erro na requisição.");
+                });
+            }
+        }
+        </script>';
+    }
+}
 
 hooks()->add_filter('invoice_html_view_data', 'asaas_gateway_inject_payment_button');
 
@@ -157,4 +206,61 @@ function asaas_gateway_invoice_added_hook($invoice_id)
             }
         }
     }
+}
+
+function asaas_gateway_invoice_cancelled_hook($invoice_id)
+{
+    asaas_gateway_delete_pending_charges($invoice_id);
+}
+
+function asaas_gateway_invoice_deleted_hook($invoice_id)
+{
+    asaas_gateway_delete_pending_charges($invoice_id);
+}
+
+function asaas_gateway_delete_pending_charges($invoice_id)
+{
+    $CI = &get_instance();
+    $CI->load->model('payment_modes_model');
+
+    $gateways = $CI->payment_modes_model->get('', ['active' => 1]);
+    $gateway = null;
+    foreach ($gateways as $g) {
+        if ($g['id'] == 'asaas_gateway') {
+            $gateway = $g;
+            break;
+        }
+    }
+
+    if(!$gateway) return;
+
+    $CI->load->library('asaas_gateway/asaas_lib');
+    $CI->asaas_lib->set_api_key($CI->encryption->decrypt($gateway['instance']->getSetting('api_key')));
+    $CI->asaas_lib->set_sandbox($gateway['instance']->getSetting('sandbox'));
+
+    // Get all charges for this invoice
+    $charges_res = $CI->asaas_lib->get_charges_by_external_reference($invoice_id);
+
+    if ($charges_res['success'] && !empty($charges_res['data']['data'])) {
+        foreach ($charges_res['data']['data'] as $charge) {
+            // Delete if pending or overdue
+            if ($charge['status'] == 'PENDING' || $charge['status'] == 'OVERDUE') {
+                $res = $CI->asaas_lib->delete_charge($charge['id']);
+                if($res['success']) {
+                    log_activity('Asaas Charge ' . $charge['id'] . ' deleted due to Invoice ' . $invoice_id . ' cancellation/deletion.');
+                }
+            }
+        }
+    }
+}
+
+function asaas_gateway_customer_profile_tabs($tabs)
+{
+    $tabs['asaas_subscriptions'] = [
+        'name' => 'Assinaturas',
+        'icon' => 'fa fa-refresh',
+        'view' => 'asaas_gateway/admin/subscriptions_tab',
+        'position' => 90,
+    ];
+    return $tabs;
 }

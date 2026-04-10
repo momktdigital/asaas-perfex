@@ -360,6 +360,12 @@
                 <a href="<?php echo site_url('invoice/'.$invoice->id.'/'.$hash); ?>" class="text-muted"><i class="fa fa-arrow-left"></i> Voltar para a fatura</a>
             </div>
 
+            <div class="text-center" style="margin-bottom: 50px;">
+                <p class="text-muted" style="font-size: 13px;">
+                    Solução desenvolvida por <a href="https://nonamo.com.br" target="_blank" style="color: #007bff; font-weight: 600; text-decoration: none;">Nonamo</a>
+                </p>
+            </div>
+
         </div>
     </div>
 </div>
