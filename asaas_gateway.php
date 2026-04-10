@@ -36,8 +36,10 @@ hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
 
 function asaas_gateway_exclude_csrf_webhook($uris)
 {
-    // AQUI ESTÁ O AJUSTE COM O CURINGA .*
-    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify.*';
+    // Regra curinga agressiva: ignora CSRF em qualquer rota que contenha "asaas_gateway_webhook"
+    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify';
+    $uris[] = 'asaas_gateway/asaas_gateway_webhook/notify/(.*)';
+    $uris[] = '(.*)asaas_gateway_webhook(.*)';
     return $uris;
 }
 
