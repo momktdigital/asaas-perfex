@@ -139,12 +139,52 @@ class Client extends ClientsController
             }
         }
 
-        if ($charge_id) {
-            // Update existing
-            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        $save_card_recurring = $this->input->post('save_card_recurring');
+
+        if ($save_card_recurring && $invoice->recurring > 0) {
+            // Create Subscription instead of single charge
+            $cycle = 'MONTHLY'; // Default
+            if (isset($invoice->recurring_type) && isset($invoice->custom_recurring)) {
+                 if ($invoice->recurring == 1 && $invoice->recurring_type == 'weeks') $cycle = 'WEEKLY';
+                 else if ($invoice->recurring == 1 && $invoice->recurring_type == 'months') $cycle = 'MONTHLY';
+                 else if ($invoice->recurring == 6 && $invoice->recurring_type == 'months') $cycle = 'SEMIANNUALLY';
+                 else if ($invoice->recurring == 1 && $invoice->recurring_type == 'years') $cycle = 'YEARLY';
+                 else if ($invoice->recurring == 12 && $invoice->recurring_type == 'months') $cycle = 'YEARLY';
+            } else if (isset($invoice->recurring)) {
+                 if ($invoice->recurring == 1) $cycle = 'MONTHLY';
+                 if ($invoice->recurring == 6) $cycle = 'SEMIANNUALLY';
+                 if ($invoice->recurring == 12) $cycle = 'YEARLY';
+            }
+
+            $dueDate = $invoice->duedate;
+            if(strtotime($dueDate) < strtotime(date('Y-m-d'))) $dueDate = date('Y-m-d');
+
+            $sub_data = [
+                'customer' => $customer_id,
+                'billingType' => 'CREDIT_CARD',
+                'value' => $invoice->total,
+                'nextDueDate' => $dueDate,
+                'cycle' => $cycle,
+                'creditCardToken' => $token_res['data']['creditCardToken'],
+                'description' => 'Assinatura Cartão - Fatura #' . $invoice->number,
+                'externalReference' => 'auth_' . $invoice->id
+            ];
+            if($split) $sub_data['split'] = $split;
+
+            $charge_res = $this->asaas_lib->create_subscription($sub_data);
+
+            if($charge_res['success']) {
+                // Delete the pending undefined charge generated for this invoice
+                if ($charge_id) $this->asaas_lib->delete_charge($charge_id);
+            }
+
         } else {
-            // Create new
-            $charge_res = $this->asaas_lib->create_charge($charge_data);
+            // Standard single charge creation/update
+            if ($charge_id) {
+                $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+            } else {
+                $charge_res = $this->asaas_lib->create_charge($charge_data);
+            }
         }
 
         // Clear sensitive data
@@ -306,24 +346,80 @@ class Client extends ClientsController
         }
         $customer_id = $customer_res['id'];
 
-        $auth_data = [
+        // Determine Frequency
+        $cycle = 'MONTHLY'; // Default
+        if (isset($invoice->recurring_type) && isset($invoice->custom_recurring)) {
+             if ($invoice->recurring == 1 && $invoice->recurring_type == 'weeks') {
+                 $cycle = 'WEEKLY';
+             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'months') {
+                 $cycle = 'MONTHLY';
+             } else if ($invoice->recurring == 6 && $invoice->recurring_type == 'months') {
+                 $cycle = 'SEMIANNUALLY';
+             } else if ($invoice->recurring == 1 && $invoice->recurring_type == 'years') {
+                 $cycle = 'YEARLY';
+             } else if ($invoice->recurring == 12 && $invoice->recurring_type == 'months') {
+                 $cycle = 'YEARLY';
+             }
+        } else if (isset($invoice->recurring)) {
+             if ($invoice->recurring == 1) $cycle = 'MONTHLY';
+             if ($invoice->recurring == 6) $cycle = 'SEMIANNUALLY';
+             if ($invoice->recurring == 12) $cycle = 'YEARLY';
+        }
+
+        $dueDate = $invoice->duedate;
+        if(strtotime($dueDate) < strtotime(date('Y-m-d'))) {
+            $dueDate = date('Y-m-d');
+        }
+
+        $sub_data = [
             'customer' => $customer_id,
+            'billingType' => 'PIX',
             'value' => $invoice->total,
-            'description' => 'Pix Automatico for Recurring Invoice',
+            'nextDueDate' => $dueDate,
+            'cycle' => $cycle,
+            'description' => 'Assinatura Pix - Fatura #' . $invoice->number,
             'externalReference' => 'auth_' . $invoice->id
         ];
 
-        $res = $this->asaas_lib->create_pix_auth($auth_data);
+        // Split Logic
+        $split = $this->get_split_config();
+        if($split) {
+            $sub_data['split'] = $split;
+        }
+
+        $res = $this->asaas_lib->create_subscription($sub_data);
 
         if($res['success']) {
+            // For subscriptions, Asaas generates a payment link / QR code that can be accessed via the first payment of the subscription.
+            // Asaas usually creates the first charge immediately for subscriptions starting today or in the future.
+
+            // Get the charges for this subscription to show the QR Code
+            $charges = $this->asaas_lib->request('/subscriptions/' . $res['data']['id'] . '/payments', 'GET');
+
+            $encodedImage = '';
+            $payload = '';
+
+            if ($charges['success'] && !empty($charges['data']['data'])) {
+                $first_charge_id = $charges['data']['data'][0]['id'];
+                $qr_res = $this->asaas_lib->request('/payments/' . $first_charge_id . '/pixQrCode', 'GET');
+                if($qr_res['success']) {
+                    $encodedImage = $qr_res['data']['encodedImage'];
+                    $payload = $qr_res['data']['payload'];
+                }
+            }
+
             // Store auth request in DB
             $this->db->insert(db_prefix() . 'asaas_pix_auth', [
                 'client_id' => $client->userid,
-                'authorization_id' => $res['data']['id'],
+                'authorization_id' => $res['data']['id'], // Save subscription ID
                 'status' => 'PENDING'
             ]);
 
-            echo json_encode(['success' => true, 'encodedImage' => $res['data']['immediateQrCode']['encodedImage'], 'payload' => $res['data']['immediateQrCode']['payload']]);
+            if (!empty($encodedImage)) {
+                echo json_encode(['success' => true, 'encodedImage' => $encodedImage, 'payload' => $payload]);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Assinatura criada, mas falha ao recuperar QR Code do primeiro pagamento.']);
+            }
         } else {
             echo json_encode(['success' => false, 'message' => $res['error']]);
         }

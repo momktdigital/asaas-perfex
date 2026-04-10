@@ -118,6 +118,16 @@ class Asaas_lib
         return $this->request('/creditCard/tokenize', 'POST', $data);
     }
 
+    public function create_subscription($data)
+    {
+        return $this->request('/subscriptions', 'POST', $data);
+    }
+
+    public function get_subscription($id)
+    {
+        return $this->request('/subscriptions/' . $id, 'GET');
+    }
+
     public function create_pix_auth($data)
     {
         return $this->request('/pix/automatic/authorizations', 'POST', $data);

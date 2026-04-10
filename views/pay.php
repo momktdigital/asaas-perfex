@@ -46,7 +46,7 @@
 
                                 <?php if($is_recurring && $pix_auth_status != 'ACTIVE'): ?>
                                     <hr>
-                                    <button id="subscribe_pix_auto" class="btn btn-primary" onclick="subscribePixAuto()"><?php echo _l('asaas_pix_automatico_subscribe'); ?></button>
+                                    <button id="subscribe_pix_auto" class="btn btn-primary" onclick="subscribePixAuto()">Assinar Pix Mensal Automático</button>
                                     <div id="pix_auto_container" style="display:none;"></div>
                                 <?php endif; ?>
                             </div>
@@ -79,6 +79,17 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <?php if ($is_recurring): ?>
+                                        <div class="form-group">
+                                            <div class="checkbox checkbox-primary">
+                                                <input type="checkbox" id="save_card_recurring" name="save_card_recurring" value="1">
+                                                <label for="save_card_recurring">
+                                                    Salvar cartão para pagamentos automáticos mensais (Assinatura)
+                                                </label>
+                                            </div>
+                                        </div>
+                                    <?php endif; ?>
+
                                     <div class="form-group">
                                         <label><?php echo _l('asaas_installments'); ?></label>
                                         <select name="installmentCount" class="form-control">
