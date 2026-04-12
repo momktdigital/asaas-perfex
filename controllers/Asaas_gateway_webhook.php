@@ -22,11 +22,10 @@ class Asaas_gateway_webhook extends CI_Controller
 
             $event = $post_data['event'];
 
-            // 2. Intercepta eventos de conta e ignora em silêncio (evita erro 401 de token)
-            // No futuro, você pode adicionar a lógica de subcontas aqui.
-            if (strpos($event, 'ACCOUNT_') === 0) {
+            // 2. Intercepta eventos que não são de pagamento direto e ignora em silêncio
+            if (strpos($event, 'ACCOUNT_') === 0 || strpos($event, 'PIX_') === 0) {
                 header("HTTP/1.1 200 OK");
-                echo json_encode(['success' => true, 'message' => 'Account event ignored for now']);
+                echo json_encode(['success' => true, 'message' => 'Event ignored for now']);
                 return;
             }
 
