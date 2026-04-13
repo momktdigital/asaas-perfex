@@ -76,6 +76,18 @@ class Client extends ClientsController
         $expiryYear = trim($expiry[1]);
         if(strlen($expiryYear) == 2) $expiryYear = '20' . $expiryYear;
 
+        $clean_phone_cc = preg_replace('/[^0-9]/', '', $this->clients_model->get_contact(get_primary_contact_user_id($client->userid))->phonenumber ?? $client->phonenumber ?? '');
+        if (strpos($clean_phone_cc, '55') === 0 && strlen($clean_phone_cc) > 11) {
+            $clean_phone_cc = substr($clean_phone_cc, 2);
+        }
+
+        $postalCode_cc = preg_replace('/[^0-9]/', '', isset($client->billing_zip) && !empty($client->billing_zip) ? $client->billing_zip : (isset($client->zip) ? $client->zip : ''));
+        $addressRaw_cc = isset($client->billing_street) && !empty($client->billing_street) ? $client->billing_street : (isset($client->address) ? $client->address : '');
+        $addressNumber_cc = preg_replace('/[^0-9]/', '', $addressRaw_cc);
+        if (empty($addressNumber_cc)) {
+            $addressNumber_cc = '0';
+        }
+
         // Tokenize
         $token_data = [
             'customer' => $customer_id,
@@ -90,9 +102,9 @@ class Client extends ClientsController
                 'name' => $data['holderName'],
                 'email' => $this->clients_model->get_contact(get_primary_contact_user_id($client->userid))->email ?? '',
                 'cpfCnpj' => preg_replace('/[^0-9]/', '', $client->vat ?? ''),
-                'postalCode' => preg_replace('/[^0-9]/', '', $client->billing_zip ?? ''),
-                'addressNumber' => '0', // Required by Asaas, defaulting to 0 as Perfex doesn't strictly enforce it separately
-                'phone' => preg_replace('/[^0-9]/', '', $this->clients_model->get_contact(get_primary_contact_user_id($client->userid))->phonenumber ?? $client->phonenumber ?? ''),
+                'postalCode' => $postalCode_cc,
+                'addressNumber' => $addressNumber_cc,
+                'phone' => $clean_phone_cc,
             ],
             'remoteIp' => $this->input->ip_address()
         ];
@@ -450,13 +462,27 @@ class Client extends ClientsController
             }
         }
 
+        $clean_phone = preg_replace('/[^0-9]/', '', $client_phone);
+        if (strpos($clean_phone, '55') === 0 && strlen($clean_phone) > 11) {
+            $clean_phone = substr($clean_phone, 2);
+        }
+
+        $postalCode = preg_replace('/[^0-9]/', '', isset($client->billing_zip) && !empty($client->billing_zip) ? $client->billing_zip : (isset($client->zip) ? $client->zip : ''));
+        $addressRaw = isset($client->billing_street) && !empty($client->billing_street) ? $client->billing_street : (isset($client->address) ? $client->address : '');
+        $addressNumber = preg_replace('/[^0-9]/', '', $addressRaw);
+        if (empty($addressNumber)) {
+            $addressNumber = '0';
+        }
+
         // Create new
         $data = [
             'name' => isset($client->company) ? $client->company : '',
             'cpfCnpj' => $cpfCnpj,
             'email' => $client_email,
-            'mobilePhone' => preg_replace('/[^0-9]/', '', $client_phone),
-            'externalReference' => $client->userid
+            'mobilePhone' => $clean_phone,
+            'externalReference' => $client->userid,
+            'postalCode' => $postalCode,
+            'addressNumber' => $addressNumber
         ];
 
         $res = $this->asaas_lib->create_customer($data);
