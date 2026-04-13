@@ -1,6 +1,7 @@
 <?php
 
 
+
 defined('BASEPATH') or exit('No direct script access allowed');
 
 /*
@@ -33,6 +34,79 @@ hooks()->add_filter("other_merge_fields_available", "asaas_gateway_register_merg
 hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields", 10, 2);
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
+hooks()->add_action('admin_init', 'asaas_gateway_module_init_menu_items');
+
+
+hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_expense_footer');
+
+function asaas_gateway_admin_expense_footer()
+{
+    $CI = &get_instance();
+    $uri = $CI->uri->uri_string();
+
+    // If we are in the expenses list or viewing a single expense
+    if (strpos($uri, 'expenses/list_expenses') !== false || strpos($uri, 'expenses/expense/') !== false || strpos($uri, 'expenses#') !== false) {
+        echo '<script>
+        $(function() {
+            $(document).ajaxComplete(function(event, xhr, settings) {
+                if (settings.url.indexOf("expenses/get_expense_data_ajax") !== -1) {
+                    setTimeout(function() {
+                        // Look for the custom field value for barcode
+                        var barcodeText = $(".text-muted:contains(\'Código de Barras\')").parent().text() || $(".text-muted:contains(\'Linha Digitável\')").parent().text();
+
+                        // Check if expense is unpaid
+                        var isUnpaid = $(".label-danger:contains(\'Não pago\')").length > 0 || $(".label-danger:contains(\'Unpaid\')").length > 0;
+
+                        if(isUnpaid && barcodeText && barcodeText.length > 20) {
+                            var expenseId = $("input[name=\'expenseid\']").val();
+                            if(expenseId && $("#asaas_pay_bill_btn").length == 0) {
+                                var btnHtml = \'<a href="\' + admin_url + \'asaas_gateway/account/pay_expense/\' + expenseId + \'" id="asaas_pay_bill_btn" class="btn btn-info pull-right mleft5"><i class="fa fa-barcode"></i> Pagar com Asaas</a>\';
+
+                                // Insert button in the top action buttons area
+                                var actionArea = $(".pull-right._buttons.mright5").length > 0 ? $(".pull-right._buttons.mright5") : $(".pull-right");
+                                if($(".expense-action-buttons").length > 0) {
+                                    $(".expense-action-buttons").append(btnHtml);
+                                } else {
+                                    actionArea.first().append(btnHtml);
+                                }
+                            }
+                        }
+                    }, 800);
+                }
+            });
+        });
+        </script>';
+    }
+}
+
+function asaas_gateway_module_init_menu_items()
+{
+    $CI = &get_instance();
+
+    if (has_permission('invoices', '', 'view')) { // Use invoices permission as proxy or add custom
+        // Add Parent Menu
+        $CI->app_menu->add_sidebar_menu_item('asaas_gateway_menu', [
+            'name'     => 'Conta Asaas',
+            'href'     => admin_url('asaas_gateway/account'),
+            'icon'     => 'fa fa-bank',
+            'position' => 30,
+        ]);
+
+        // Add Submenus
+        $CI->app_menu->add_sidebar_children_item('asaas_gateway_menu', [
+            'slug'     => 'asaas_transfers',
+            'name'     => 'Transferências',
+            'href'     => admin_url('asaas_gateway/account/transfers'),
+            'position' => 10,
+        ]);
+        $CI->app_menu->add_sidebar_children_item('asaas_gateway_menu', [
+            'slug'     => 'asaas_anticipations',
+            'name'     => 'Antecipações',
+            'href'     => admin_url('asaas_gateway/account/anticipations'),
+            'position' => 20,
+        ]);
+    }
+}
 
 hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
 

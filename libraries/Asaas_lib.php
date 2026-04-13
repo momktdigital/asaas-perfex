@@ -154,4 +154,29 @@ class Asaas_lib
     {
         return $this->request('/invoices', 'GET', ['externalReference' => $externalReference]);
     }
+
+    public function get_balance()
+    {
+        return $this->request('/finance/balance', 'GET');
+    }
+
+    public function get_extract($limit = 10, $offset = 0)
+    {
+        return $this->request('/financialTransactions', 'GET', ['limit' => $limit, 'offset' => $offset]);
+    }
+
+    public function pay_bill($data)
+    {
+        return $this->request('/bill', 'POST', $data);
+    }
+
+    public function transfer($data)
+    {
+        return $this->request('/transfers', 'POST', $data);
+    }
+
+    public function request_anticipation($data)
+    {
+        return $this->request('/anticipations', 'POST', $data);
+    }
 }
