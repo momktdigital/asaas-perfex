@@ -268,7 +268,7 @@
 
                         <!-- CREDIT CARD TAB -->
                         <div role="tabpanel" class="tab-pane fade" id="credit_card">
-                            <form action="<?php echo site_url('asaas_gateway/client/process_credit_card/' . $invoice->id . '/' . $hash); ?>" method="post" id="cc_form" onsubmit="showCCLoading()">
+                            <form action="<?php echo site_url('asaas_gateway/client/process_credit_card/' . $invoice->id . '/' . $hash); ?>" method="post" id="cc_form" onsubmit="return processCreditCard(event)">
                                 <input type="hidden" name="<?php echo $this->security->get_csrf_token_name(); ?>" value="<?php echo $this->security->get_csrf_hash(); ?>">
 
                                 <div class="form-group">
@@ -300,16 +300,6 @@
                                             <input type="text" name="ccv" class="form-control form-control-custom" placeholder="123" required autocomplete="cc-csc">
                                         </div>
                                     </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label class="control-label">Parcelamento</label>
-                                    <select name="installmentCount" class="form-control form-control-custom">
-                                        <option value="1">1x - <?php echo app_format_money($invoice->total, $invoice->currency_name); ?></option>
-                                        <?php for($i=2; $i<=12; $i++): ?>
-                                            <option value="<?php echo $i; ?>"><?php echo $i; ?>x - <?php echo app_format_money($invoice->total / $i, $invoice->currency_name); ?></option>
-                                        <?php endfor; ?>
-                                    </select>
                                 </div>
 
                                 <?php if ($is_recurring): ?>
@@ -470,12 +460,40 @@
         });
     }
 
-    function showCCLoading() {
+    function processCreditCard(event) {
+        event.preventDefault();
+        var form = $('#cc_form');
         var btn = $('#btn_cc_submit');
+
         btn.prop('disabled', true);
         btn.find('.loading-spinner').show();
-        // Allow form to submit natively
-        return true;
+        $('#checkout-alert').slideUp();
+
+        $.ajax({
+            type: form.attr('method'),
+            url: form.attr('action'),
+            data: form.serialize(),
+            dataType: 'json',
+            success: function(response) {
+                btn.find('.loading-spinner').hide();
+                if(response.success) {
+                    showAlert('<i class="fa fa-check-circle"></i> ' + response.message, 'success');
+                    setTimeout(function() {
+                        window.location.href = response.redirect_url;
+                    }, 2000);
+                } else {
+                    showAlert('<i class="fa fa-exclamation-circle"></i> ' + response.message, 'danger');
+                    btn.prop('disabled', false);
+                }
+            },
+            error: function() {
+                btn.find('.loading-spinner').hide();
+                btn.prop('disabled', false);
+                showAlert('<i class="fa fa-exclamation-circle"></i> Erro de comunicação com o servidor.', 'danger');
+            }
+        });
+
+        return false;
     }
 
     function copyPixCode() {
