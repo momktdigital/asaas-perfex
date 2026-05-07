@@ -283,7 +283,7 @@
                                     <label class="control-label">Número do Cartão</label>
                                     <div class="input-group">
                                         <span class="input-group-addon"><i class="fa fa-credit-card"></i></span>
-                                        <input type="text" name="number" class="form-control form-control-custom" placeholder="0000 0000 0000 0000" required autocomplete="cc-number">
+                                        <input type="text" id="cc-number" name="number" class="form-control form-control-custom" placeholder="0000 0000 0000 0000" required autocomplete="cc-number" maxlength="19">
                                     </div>
                                 </div>
 
@@ -291,13 +291,13 @@
                                     <div class="col-xs-6">
                                         <div class="form-group">
                                             <label class="control-label">Validade</label>
-                                            <input type="text" name="expiry" class="form-control form-control-custom" placeholder="MM/YYYY" required autocomplete="cc-exp">
+                                            <input type="text" id="cc-expiry" name="expiry" class="form-control form-control-custom" placeholder="MM/YYYY" required autocomplete="cc-exp" maxlength="7">
                                         </div>
                                     </div>
                                     <div class="col-xs-6">
                                         <div class="form-group">
                                             <label class="control-label">CVV</label>
-                                            <input type="text" name="ccv" class="form-control form-control-custom" placeholder="123" required autocomplete="cc-csc">
+                                            <input type="text" id="cc-cvv" name="ccv" class="form-control form-control-custom" placeholder="123" required autocomplete="cc-csc" maxlength="4">
                                         </div>
                                     </div>
                                 </div>
@@ -460,10 +460,59 @@
         });
     }
 
+    $(document).ready(function() {
+        // Credit Card Number Mask
+        $('#cc-number').on('input', function() {
+            var val = $(this).val().replace(/\D/g, '');
+            var formatted = val.match(/.{1,4}/g);
+            $(this).val(formatted ? formatted.join(' ') : '');
+        });
+
+        // Credit Card Expiry Mask (MM/YYYY)
+        $('#cc-expiry').on('input', function() {
+            var val = $(this).val().replace(/\D/g, '');
+            if (val.length > 2) {
+                $(this).val(val.substring(0, 2) + '/' + val.substring(2, 6));
+            } else {
+                $(this).val(val);
+            }
+        });
+
+        // CVV Mask (Numbers only)
+        $('#cc-cvv').on('input', function() {
+            $(this).val($(this).val().replace(/\D/g, ''));
+        });
+    });
+
     function processCreditCard(event) {
         event.preventDefault();
         var form = $('#cc_form');
         var btn = $('#btn_cc_submit');
+
+        // Client-side Expiry Date Validation
+        var expiry = $('#cc-expiry').val();
+        if(expiry.length !== 7) {
+            showAlert('<i class="fa fa-exclamation-circle"></i> O formato da validade deve ser MM/YYYY', 'danger');
+            return false;
+        }
+
+        var parts = expiry.split('/');
+        var expMonth = parseInt(parts[0], 10);
+        var expYear = parseInt(parts[1], 10);
+
+        var currentDate = new Date();
+        var currentMonth = currentDate.getMonth() + 1;
+        var currentYear = currentDate.getFullYear();
+
+        if (expMonth < 1 || expMonth > 12) {
+            showAlert('<i class="fa fa-exclamation-circle"></i> Mês de validade inválido.', 'danger');
+            return false;
+        }
+
+        if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
+            showAlert('<i class="fa fa-exclamation-circle"></i> O cartão inserido já está vencido.', 'danger');
+            return false;
+        }
 
         btn.prop('disabled', true);
         btn.find('.loading-spinner').show();
