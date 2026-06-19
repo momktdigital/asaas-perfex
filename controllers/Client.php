@@ -55,6 +55,8 @@ class Client extends ClientsController
     public function process_credit_card($invoice_id, $hash)
     {
         check_invoice_restrictions($invoice_id, $hash);
+        if(!$this->input->is_ajax_request()) show_404();
+
         $invoice = $this->invoices_model->get($invoice_id);
         $client = $this->clients_model->get($invoice->clientid);
         $data = $this->input->post();
@@ -62,15 +64,15 @@ class Client extends ClientsController
         $customer_res = $this->get_or_create_asaas_customer($client);
 
         if(!$customer_res['success']) {
-            set_alert('danger', _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']);
-            redirect(site_url('asaas_gateway/client/pay/' . $invoice_id . '/' . $hash));
+            echo json_encode(['success' => false, 'message' => _l('asaas_customer_sync_failed') . ' ' . $customer_res['error']]);
+            return;
         }
         $customer_id = $customer_res['id'];
 
         $expiry = explode('/', $data['expiry']);
         if(count($expiry) != 2) {
-             set_alert('danger', _l('asaas_invalid_card'));
-             redirect(site_url('asaas_gateway/client/pay/' . $invoice_id . '/' . $hash));
+             echo json_encode(['success' => false, 'message' => _l('asaas_invalid_card')]);
+             return;
         }
         $expiryMonth = trim($expiry[0]);
         $expiryYear = trim($expiry[1]);
@@ -112,8 +114,8 @@ class Client extends ClientsController
         $token_res = $this->asaas_lib->tokenize_credit_card($token_data);
 
         if(!$token_res['success']) {
-            set_alert('danger', _l('asaas_payment_failed') . ' ' . $token_res['error']);
-            redirect(site_url('asaas_gateway/client/pay/' . $invoice_id . '/' . $hash));
+            echo json_encode(['success' => false, 'message' => _l('asaas_payment_failed') . ' ' . $token_res['error']]);
+            return;
         }
 
         $charge_data = [
@@ -126,12 +128,6 @@ class Client extends ClientsController
             'description' => 'Invoice #' . $invoice->number,
             'remoteIp' => $this->input->ip_address()
         ];
-
-        $installmentCount = isset($data['installmentCount']) ? intval($data['installmentCount']) : 1;
-        if($installmentCount > 1 && $installmentCount <= 12) {
-            $charge_data['installmentCount'] = $installmentCount;
-            $charge_data['installmentValue'] = $invoice->total / $installmentCount;
-        }
 
         // Split Logic
         $split = $this->get_split_config();
@@ -208,11 +204,9 @@ class Client extends ClientsController
         unset($token_data);
 
         if($charge_res['success']) {
-            set_alert('success', _l('asaas_payment_success'));
-            redirect(site_url('invoice/' . $invoice_id . '/' . $hash));
+            echo json_encode(['success' => true, 'message' => _l('asaas_payment_success'), 'redirect_url' => site_url('invoice/' . $invoice_id . '/' . $hash)]);
         } else {
-            set_alert('danger', _l('asaas_payment_failed') . ' ' . $charge_res['error']);
-            redirect(site_url('asaas_gateway/client/pay/' . $invoice_id . '/' . $hash));
+            echo json_encode(['success' => false, 'message' => _l('asaas_payment_failed') . ' ' . $charge_res['error']]);
         }
     }
 
