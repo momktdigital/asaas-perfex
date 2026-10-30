@@ -202,8 +202,36 @@
                     <!-- Invoice Summary -->
                     <div class="invoice-summary">
                         <p class="text-muted text-uppercase" style="letter-spacing: 1px; font-size: 12px; margin-bottom: 5px;">Fatura #<?php echo $invoice->number; ?></p>
-                        <h2 class="invoice-amount"><?php echo app_format_money($invoice->total, $invoice->currency_name); ?></h2>
+                        <?php
+                        $asaas_od = null;
+                        $asaas_days = (int) floor((strtotime(date('Y-m-d')) - strtotime($invoice->duedate)) / 86400);
+                        if ($asaas_days > 0) {
+                            $CI_od = &get_instance();
+                            $CI_od->load->model('payment_modes_model');
+                            foreach ($CI_od->payment_modes_model->get('', ['active' => 1]) as $g_od) {
+                                if ($g_od['id'] == 'asaas_gateway') {
+                                    $f_od = $g_od['instance']->getSetting('fine_value');
+                                    $i_od = $g_od['instance']->getSetting('interest_value');
+                                    $base_od = isset($invoice->total_left) && $invoice->total_left > 0 ? (float) $invoice->total_left : (float) $invoice->total;
+                                    $fine_amt = is_numeric($f_od) && $f_od > 0 ? round($base_od * $f_od / 100, 2) : 0;
+                                    $int_amt = is_numeric($i_od) && $i_od > 0 ? round($base_od * ($i_od / 100) * ($asaas_days / 30), 2) : 0;
+                                    $asaas_od = ['base' => $base_od, 'fine' => $fine_amt, 'interest' => $int_amt, 'total' => round($base_od + $fine_amt + $int_amt, 2)];
+                                    break;
+                                }
+                            }
+                        }
+                        ?>
+                        <h2 class="invoice-amount"><?php echo app_format_money($asaas_od ? $asaas_od['total'] : $invoice->total, $invoice->currency_name); ?></h2>
                         <p class="text-muted" style="margin-top: 8px;">Vencimento: <strong><?php echo _d($invoice->duedate); ?></strong></p>
+                        <?php if ($asaas_od) { ?>
+                            <div class="alert alert-warning" style="margin-top: 10px; text-align: left;">
+                                <strong>Fatura vencida há <?php echo $asaas_days; ?> dia(s).</strong><br>
+                                Valor original: <?php echo app_format_money($asaas_od['base'], $invoice->currency_name); ?><br>
+                                Multa: <?php echo app_format_money($asaas_od['fine'], $invoice->currency_name); ?><br>
+                                Juros: <?php echo app_format_money($asaas_od['interest'], $invoice->currency_name); ?><br>
+                                <strong>Total atualizado: <?php echo app_format_money($asaas_od['total'], $invoice->currency_name); ?></strong>
+                            </div>
+                        <?php } ?>
                     </div>
 
                     <!-- Tabs -->

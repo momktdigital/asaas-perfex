@@ -135,6 +135,7 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
         $this->apply_fine_and_interest($charge_data);
+        $this->apply_overdue_amounts($charge_data, $invoice);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -240,6 +241,7 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
         $this->apply_fine_and_interest($charge_data);
+        $this->apply_overdue_amounts($charge_data, $invoice);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -312,6 +314,7 @@ class Client extends ClientsController
             $charge_data['split'] = $split;
         }
         $this->apply_fine_and_interest($charge_data);
+        $this->apply_overdue_amounts($charge_data, $invoice);
 
         // Check if charge already exists
         $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
@@ -488,6 +491,57 @@ class Client extends ClientsController
         log_message('error', 'Asaas Create Customer Failed: ' . print_r($res, true) . ' Data sent: ' . print_r($data, true));
 
         return ['success' => false, 'error' => $res['error']];
+    }
+
+    /**
+     * Calculates late fee (one-time %) and interest (% per month, pro-rata per day)
+     * for an overdue invoice, using the gateway settings.
+     */
+    public static function calculate_overdue_amounts($invoice, $fine_pct, $interest_pct)
+    {
+        $base = isset($invoice->total_left) ? (float) $invoice->total_left : (float) $invoice->total;
+        if ($base <= 0) $base = (float) $invoice->total;
+        $res = ['base' => $base, 'days' => 0, 'fine' => 0.0, 'interest' => 0.0, 'total' => $base];
+
+        $days = (int) floor((strtotime(date('Y-m-d')) - strtotime($invoice->duedate)) / 86400);
+        if (empty($invoice->duedate) || $days <= 0) return $res;
+
+        $res['days'] = $days;
+        if (is_numeric($fine_pct) && $fine_pct > 0) {
+            $res['fine'] = round($base * $fine_pct / 100, 2);
+        }
+        if (is_numeric($interest_pct) && $interest_pct > 0) {
+            $res['interest'] = round($base * ($interest_pct / 100) * ($days / 30), 2);
+        }
+        $res['total'] = round($base + $res['fine'] + $res['interest'], 2);
+        return $res;
+    }
+
+    /**
+     * For overdue invoices, charge the updated amount (with fine + interest) due today.
+     * Fine/interest are removed from the Asaas payload to avoid double charging.
+     */
+    private function apply_overdue_amounts(&$data, $invoice)
+    {
+        $this->load->model('payment_modes_model');
+        $gateways = $this->payment_modes_model->get('', ['active' => 1]);
+        foreach ($gateways as $g) {
+            if ($g['id'] == 'asaas_gateway') {
+                $fine = $g['instance']->getSetting('fine_value');
+                $interest = $g['instance']->getSetting('interest_value');
+                $calc = self::calculate_overdue_amounts($invoice, $fine, $interest);
+                if ($calc['days'] <= 0) return;
+
+                $data['value'] = $calc['total'];
+                $data['dueDate'] = date('Y-m-d');
+                unset($data['fine'], $data['interest']);
+                $data['description'] = 'Invoice #' . $invoice->number . ' (vencida há ' . $calc['days'] . ' dias)'
+                    . ' - Original: R$ ' . number_format($calc['base'], 2, ',', '.')
+                    . ' + Multa: R$ ' . number_format($calc['fine'], 2, ',', '.')
+                    . ' + Juros: R$ ' . number_format($calc['interest'], 2, ',', '.');
+                return;
+            }
+        }
     }
 
     private function apply_fine_and_interest(&$data)
