@@ -213,6 +213,34 @@ class Asaas_lib
         ];
     }
 
+    /**
+     * Turns off every individual notification (email/sms/whatsapp) of a customer and the global flag.
+     */
+    public function disable_customer_notifications($customer_id)
+    {
+        $list = $this->request('/customers/' . $customer_id . '/notifications', 'GET');
+        $items = [];
+        if ($list['success']) {
+            foreach ($list['data']['data'] ?? [] as $n) {
+                $items[] = [
+                    'id' => $n['id'],
+                    'enabled' => false,
+                    'emailEnabledForCustomer' => false,
+                    'smsEnabledForCustomer' => false,
+                    'whatsappEnabledForCustomer' => false,
+                    'emailEnabledForProvider' => false,
+                    'smsEnabledForProvider' => false,
+                    'phoneCallEnabledForCustomer' => false,
+                ];
+            }
+        }
+        if ($items) {
+            $this->request('/notifications/batch', 'PUT', ['customer' => $customer_id, 'notifications' => $items]);
+        }
+        $r = $this->update_customer($customer_id, ['notificationDisabled' => true]);
+        return $r['success'];
+    }
+
     public function create_customer($data)
     {
         $cfg = $this->get_notification_config();
@@ -220,8 +248,12 @@ class Asaas_lib
         $data['notificationDisabled'] = $cfg['disable_all'];
         $res = $this->request('/customers', 'POST', $data);
 
-        if ($res['success'] && !$cfg['disable_all']) {
-            $this->sync_customer_notifications($res['data']['id'], false);
+        if ($res['success']) {
+            if ($cfg['disable_all']) {
+                $this->disable_customer_notifications($res['data']['id']);
+            } else {
+                $this->sync_customer_notifications($res['data']['id'], false, true);
+            }
         }
         return $res;
     }
