@@ -26,6 +26,20 @@ class Admin extends AdminController
         }
     }
 
+    /**
+     * Applies the global notification settings to all existing Asaas customers.
+     * Called repeatedly (paginated) by the settings page button.
+     */
+    public function sync_notifications()
+    {
+        if (!is_admin()) {
+            echo json_encode(['success' => false, 'error' => 'Sem permissão.']);
+            return;
+        }
+        $offset = (int) $this->input->post('offset');
+        echo json_encode($this->asaas_lib->sync_all_customers_notifications($offset, 20));
+    }
+
     public function get_customer_subscriptions()
     {
         if (!has_permission('customers', '', 'view')) {

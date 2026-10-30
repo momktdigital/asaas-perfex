@@ -14,6 +14,32 @@ Este módulo integra o gateway de pagamento Asaas ao Perfex CRM, permitindo paga
 *   **Multa e Juros:** Permite configurar a porcentagem de multa por atraso e juros ao mês.
 *   **Estorno no Asaas:** Botão na área administrativa da fatura para estornar um pagamento processado via Asaas.
 *   **Sincronização de Cancelamentos:** Deleta as cobranças geradas no Asaas automaticamente se a fatura for cancelada ou apagada no Perfex CRM.
+*   **Cobrança automática ao criar a fatura:** A cobrança é criada no Asaas assim que a fatura é criada (ou enviada, no caso de rascunhos), com o vencimento correto da fatura.
+*   **Sem cobranças duplicadas:** Pix, Boleto e Cartão reaproveitam a cobrança em aberto (pendente ou vencida) da fatura, em vez de criar uma nova a cada clique.
+*   **Boleto anexado ao e-mail:** O PDF do boleto do Asaas é anexado aos e-mails de envio da fatura, lembrete de vencimento e aviso de atraso.
+*   **Notificações do Asaas desativadas:** Clientes são criados no Asaas com `notificationDisabled`, evitando custos com e-mail/SMS, já que o Perfex envia as notificações.
+
+## Como funciona a cobrança automática
+
+1.  Ao criar a fatura, o módulo cria no Asaas uma cobrança do tipo `UNDEFINED` (o cliente escolhe Pix, Boleto ou Cartão), com `externalReference` igual ao ID da fatura e vencimento igual ao da fatura (se já vencida, usa a data de hoje).
+2.  Faturas em rascunho, pagas ou canceladas, ou que não permitem o Asaas como forma de pagamento, são ignoradas.
+3.  Quando o cliente escolhe Pix ou Boleto na tela de pagamento, a mesma cobrança é atualizada (multa/juros em faturas vencidas) e reutilizada.
+4.  Se existir Pix Automático ativo para faturas recorrentes, a cobrança do Pix Automático é criada primeiro e nenhuma cobrança extra é gerada.
+
+## Boleto no e-mail da fatura
+
+*   **Anexo automático:** o hook `before_email_template_send` baixa o PDF do `bankSlipUrl` da cobrança e o anexa como `boleto-<número>.pdf`. Só é anexado se o conteúdo retornado for realmente um PDF; falhas ficam registradas no log de atividades e não impedem o envio do e-mail. Os templates cobertos são os de envio da fatura, fatura já enviada, aviso de vencimento e aviso de atraso (lista `$slugs` em `asaas_gateway.php`, ajuste caso seus slugs sejam diferentes).
+*   **Merge field `{asaas_boleto_link}`:** link do boleto/pagamento para usar no corpo do template (Configurações > Modelos de e-mail).
+*   **Merge field `{asaas_nfe_link}`:** link da nota fiscal emitida no Asaas.
+
+## Notificações do Asaas
+
+As notificações que o Asaas envia ao cliente (e-mail, SMS e WhatsApp) geram custo. Elas são controladas globalmente em **Configurações > Pagamentos > Asaas**:
+
+*   **Desativar TODAS as notificações do Asaas** (padrão: Sim): os clientes são criados/atualizados no Asaas com `notificationDisabled: true`.
+*   Se desmarcado, é possível escolher, para cada evento, em quais canais o cliente é avisado (E-mail, SMS, WhatsApp): criação de cobranças, alteração de valor/vencimento, lembretes antes e no dia do vencimento, linha digitável do boleto e atrasos/lembretes de cobranças vencidas.
+*   **Clientes novos** recebem a configuração na criação. **Clientes já existentes** recebem a configuração na primeira vez em que são usados pelo módulo (e novamente sempre que a configuração for alterada).
+*   **Botão "Aplicar notificações a todos os clientes existentes no Asaas":** aparece abaixo da opção de desativar tudo e percorre, em lotes de 20, todos os clientes da conta Asaas aplicando a configuração atual. Salve as configurações antes de executar. Apenas administradores podem usá-lo.
 
 ## Instalação
 

@@ -85,6 +85,41 @@ function asaas_gateway_exclude_csrf_webhook($uris)
     return $uris;
 }
 
+hooks()->add_action('app_admin_footer', 'asaas_gateway_settings_notifications_button');
+
+/**
+ * Injects, in the gateway settings page, a button that applies the notification
+ * settings to every customer that already exists in Asaas.
+ */
+function asaas_gateway_settings_notifications_button()
+{
+    $CI = &get_instance();
+    if (strpos($CI->uri->uri_string(), 'settings') === false || !is_admin()) {
+        return;
+    }
+    echo '<script>
+    $(function() {
+        var $field = $("[name$=\'asaas_gateway_notif_disable_all\']").first().closest(".form-group");
+        if (!$field.length || $("#asaas_sync_notif_btn").length) return;
+        $field.after(\'<div class="form-group"><button type="button" id="asaas_sync_notif_btn" class="btn btn-warning">Aplicar notificações a todos os clientes existentes no Asaas</button> <span id="asaas_sync_notif_status" class="mleft10"></span><p class="text-muted mtop5">Salve as configurações antes de executar. O processo roda em lotes e pode demorar com muitos clientes.</p></div>\');
+        $("#asaas_sync_notif_btn").on("click", function() {
+            if (!confirm("Aplicar a configuração atual de notificações a TODOS os clientes do Asaas?")) return;
+            var $btn = $(this).prop("disabled", true), total = 0, failed = 0;
+            function run(offset) {
+                $.post(admin_url + "asaas_gateway/admin/sync_notifications", { offset: offset }, function(res) {
+                    res = JSON.parse(res);
+                    if (!res.success) { $("#asaas_sync_notif_status").text("Erro: " + res.error); $btn.prop("disabled", false); return; }
+                    total += res.processed; failed += res.failed;
+                    $("#asaas_sync_notif_status").text("Processados: " + total + " | Falhas: " + failed);
+                    if (res.hasMore) { run(res.next); } else { $("#asaas_sync_notif_status").append(" - Concluído!"); $btn.prop("disabled", false); }
+                }).fail(function() { $("#asaas_sync_notif_status").text("Erro na requisição."); $btn.prop("disabled", false); });
+            }
+            run(0);
+        });
+    });
+    </script>';
+}
+
 function asaas_gateway_admin_invoice_footer()
 {
     $CI = &get_instance();

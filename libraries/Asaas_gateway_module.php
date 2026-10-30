@@ -23,7 +23,7 @@ class Asaas_gateway_module extends App_gateway
         /**
          * Add gateway settings
          */
-        $this->setSettings([
+        $base_settings = [
             [
                 'name' => 'api_key_prod',
                 'encrypted' => true,
@@ -97,7 +97,27 @@ class Asaas_gateway_module extends App_gateway
                 'label' => 'settings_paymentmethod_currencies',
                 'default' => 'BRL',
             ],
-        ]);
+        ];
+
+        // Global Asaas customer notification settings
+        $notif = include __DIR__ . '/../notifications_config.php';
+        $notif_settings = [[
+            'name'    => 'notif_disable_all',
+            'label'   => 'Desativar TODAS as notificações do Asaas (recomendado se o Perfex já envia e-mails)',
+            'type'    => 'yes_no',
+            'default' => 1,
+        ]];
+        foreach ($notif['events'] as $key => $ev) {
+            foreach ($notif['channels'] as $ch => $ch_label) {
+                $notif_settings[] = [
+                    'name'    => 'notif_' . $key . '_' . $ch,
+                    'label'   => 'Notificação ao cliente: ' . $ev['label'] . ' (' . $ch_label . ')',
+                    'type'    => 'yes_no',
+                    'default' => 0,
+                ];
+            }
+        }
+        $this->setSettings(array_merge($base_settings, $notif_settings));
 
         /**
          * Mandatory for button visibility in Client Profile
