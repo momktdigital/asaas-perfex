@@ -33,6 +33,48 @@ hooks()->add_filter("invoice_merge_fields", "asaas_gateway_invoice_merge_fields"
 hooks()->add_action('app_admin_footer', 'asaas_gateway_admin_invoice_footer');
 
 hooks()->add_filter('csrf_exclude_uris', 'asaas_gateway_exclude_csrf_webhook');
+hooks()->add_filter('before_email_template_send', 'asaas_gateway_attach_boleto_to_email');
+
+/**
+ * Attaches the Asaas boleto PDF to invoice e-mails (send, due notice, overdue notice).
+ */
+function asaas_gateway_attach_boleto_to_email($hook_data)
+{
+    $slugs = ['invoice-send-to-client', 'invoice-already-send', 'invoice-due-notice', 'invoice-overdue-notice',
+              'invoice_send_to_customer', 'invoice_send_to_customer_already_sent', 'invoice_due_notice', 'invoice_overdue_notice'];
+    $tpl = isset($GLOBALS['SENDING_EMAIL_TEMPLATE_CLASS']) ? $GLOBALS['SENDING_EMAIL_TEMPLATE_CLASS'] : null;
+    if (!$tpl || $tpl->get_rel_type() !== 'invoice' || !$tpl->get_rel_id()) {
+        return $hook_data;
+    }
+    if (!isset($hook_data['template']->slug) || !in_array($hook_data['template']->slug, $slugs)) {
+        return $hook_data;
+    }
+
+    try {
+        $charge = asaas_gateway_ensure_invoice_charge($tpl->get_rel_id());
+        if (!$charge || empty($charge['bankSlipUrl'])) {
+            return $hook_data;
+        }
+        $ch = curl_init($charge['bankSlipUrl']);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_TIMEOUT => 20]);
+        $pdf = curl_exec($ch);
+        curl_close($ch);
+
+        if ($pdf && strpos($pdf, '%PDF') === 0) {
+            $hook_data['attachments'][] = [
+                'attachment' => $pdf,
+                'filename'   => 'boleto-' . format_invoice_number($tpl->get_rel_id()) . '.pdf',
+                'type'       => 'application/pdf',
+            ];
+        } else {
+            log_activity('Asaas: bankSlipUrl nao retornou PDF para a fatura ' . $tpl->get_rel_id());
+        }
+    } catch (Throwable $e) {
+        log_activity('Asaas: erro ao anexar boleto: ' . $e->getMessage());
+    }
+
+    return $hook_data;
+}
 
 function asaas_gateway_exclude_csrf_webhook($uris)
 {
