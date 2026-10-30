@@ -40,6 +40,18 @@ class Admin extends AdminController
         echo json_encode($this->asaas_lib->sync_all_customers_notifications($offset, 20));
     }
 
+    /**
+     * Creates/updates every Perfex client in Asaas. Called repeatedly (paginated) by the settings button.
+     */
+    public function sync_clients()
+    {
+        if (!is_admin()) {
+            echo json_encode(['success' => false, 'error' => 'Sem permissão.']);
+            return;
+        }
+        @set_time_limit(300);
+        echo json_encode($this->asaas_lib->sync_clients_page((int) $this->input->post('offset'), 10));
+    }
     public function get_customer_subscriptions()
     {
         if (!has_permission('customers', '', 'view')) {

@@ -102,6 +102,25 @@ function asaas_gateway_settings_notifications_button()
         var $field = $("[name$=\'asaas_gateway_notif_disable_all\']").first().closest(".form-group");
         if (!$field.length || $("#asaas_sync_notif_btn").length) return;
         $field.after(\'<div class="form-group"><button type="button" id="asaas_sync_notif_btn" class="btn btn-warning">Aplicar notificações a todos os clientes existentes no Asaas</button> <span id="asaas_sync_notif_status" class="mleft10"></span><p class="text-muted mtop5">Salve as configurações antes de executar. O processo roda em lotes e pode demorar com muitos clientes.</p></div>\');
+        if (!$("#asaas_sync_clients_btn").length) {
+            $("#asaas_sync_notif_btn").closest(".form-group").after(\'<div class="form-group"><button type="button" id="asaas_sync_clients_btn" class="btn btn-info">Sincronizar todos os clientes com o Asaas</button> <span id="asaas_sync_clients_status" class="mleft10"></span><div id="asaas_sync_clients_errors" class="text-danger mtop5"></div><p class="text-muted mtop5">Cria no Asaas os clientes que ainda não existem e atualiza os dados (e-mail, telefone, endereço, bairro etc.) dos já existentes.</p></div>\');
+            $("#asaas_sync_clients_btn").on("click", function() {
+                if (!confirm("Sincronizar TODOS os clientes do Perfex com o Asaas?")) return;
+                var $b = $(this).prop("disabled", true), t = {c: 0, u: 0, f: 0};
+                $("#asaas_sync_clients_errors").empty();
+                function run(offset) {
+                    $.post(admin_url + "asaas_gateway/admin/sync_clients", { offset: offset }, function(res) {
+                        res = JSON.parse(res);
+                        if (!res.success) { $("#asaas_sync_clients_status").text("Erro: " + res.error); $b.prop("disabled", false); return; }
+                        t.c += res.created; t.u += res.updated; t.f += res.failed;
+                        $.each(res.errors || [], function(i, e) { $("#asaas_sync_clients_errors").append($("<div>").text(e)); });
+                        $("#asaas_sync_clients_status").text("Criados: " + t.c + " | Atualizados: " + t.u + " | Falhas: " + t.f);
+                        if (res.hasMore) { run(res.next); } else { $("#asaas_sync_clients_status").append(" - Concluído!"); $b.prop("disabled", false); }
+                    }).fail(function() { $("#asaas_sync_clients_status").text("Erro na requisição."); $b.prop("disabled", false); });
+                }
+                run(0);
+            });
+        }
         function asaasToggleNotif() {
             var disableAll = $("[name$=\'asaas_gateway_notif_disable_all\']:checked").val() == "1";
             $("[name*=\'asaas_gateway_notif_\']").not("[name$=\'asaas_gateway_notif_disable_all\']").each(function() {
@@ -449,7 +468,7 @@ function asaas_gateway_client_added_hook($client_id)
         $CI = &get_instance();
         $CI->load->model('clients_model');
         $client = $CI->clients_model->get($client_id);
-        if ($client) asaas_gateway_ensure_customer($client);
+        if ($client) asaas_gateway_ensure_customer($client, true);
     } catch (Throwable $e) {
         log_activity('Asaas: erro ao criar cliente ' . $client_id . ': ' . $e->getMessage());
     }
@@ -458,38 +477,17 @@ function asaas_gateway_client_added_hook($client_id)
 /**
  * Finds (by CPF/CNPJ) or creates the Asaas customer for a Perfex client. Returns the Asaas id or null.
  */
-function asaas_gateway_ensure_customer($client)
+function asaas_gateway_ensure_customer($client, $update_existing = false)
 {
     $CI = &get_instance();
     if (!asaas_gateway_boot_lib()) return null;
-
-    $cpfCnpj = preg_replace('/[^0-9]/', '', isset($client->vat) ? $client->vat : '');
-    if (!empty($cpfCnpj)) {
-        $found = $CI->asaas_lib->get_customer_by_cpf_cnpj($cpfCnpj);
-        if ($found['success'] && !empty($found['data']['data'])) return $found['data']['data'][0]['id'];
-    }
-    $contact = $CI->clients_model->get_contact(get_primary_contact_user_id($client->userid));
-    $phone = ($contact && !empty($contact->phonenumber)) ? $contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
-    $phone = preg_replace('/[^0-9]/', '', $phone);
-    if (strpos($phone, '55') === 0 && strlen($phone) > 11) $phone = substr($phone, 2);
-    $zip = preg_replace('/[^0-9]/', '', !empty($client->billing_zip) ? $client->billing_zip : ($client->zip ?? ''));
-    $addr = !empty($client->billing_street) ? $client->billing_street : ($client->address ?? '');
-    $num = preg_replace('/[^0-9]/', '', $addr);
-    $created = $CI->asaas_lib->create_customer([
-        'name' => $client->company ?? '',
-        'cpfCnpj' => $cpfCnpj,
-        'email' => $contact ? $contact->email : '',
-        'mobilePhone' => $phone,
-        'externalReference' => $client->userid,
-        'postalCode' => $zip,
-        'addressNumber' => $num === '' ? '0' : $num,
-    ]);
-    if (!$created['success']) {
-        log_activity('Asaas: falha ao criar cliente ' . $client->userid . ': ' . $created['error']);
+    $r = $CI->asaas_lib->upsert_customer($client, $update_existing);
+    if (!$r['success']) {
+        log_activity('Asaas: falha ao criar/atualizar cliente ' . $client->userid . ': ' . $r['error']);
         return null;
     }
-    log_activity('Asaas: cliente ' . $client->userid . ' criado no Asaas (' . $created['data']['id'] . ')');
-    return $created['data']['id'];
+    if (!empty($r['created'])) log_activity('Asaas: cliente ' . $client->userid . ' criado no Asaas (' . $r['id'] . ')');
+    return $r['id'];
 }
 function asaas_gateway_invoice_cancelled_hook($invoice_id)
 {

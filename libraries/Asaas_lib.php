@@ -241,6 +241,146 @@ class Asaas_lib
         return $r['success'];
     }
 
+    private function norm_key($s)
+    {
+        return preg_replace('/[^a-z0-9]/', '', strtolower((function_exists('iconv') ? (string) @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $s) : $s)));
+    }
+
+    /**
+     * Custom field values of a client, keyed by normalized field name (e.g. "bairro", "n", "whatsapp").
+     */
+    private function client_custom_fields($userid)
+    {
+        $db = $this->ci->db;
+        $rows = $db->select('f.name, v.value')
+            ->from(db_prefix() . 'customfieldsvalues v')
+            ->join(db_prefix() . 'customfields f', 'f.id = v.fieldid')
+            ->where('v.relid', $userid)->where('v.fieldto', 'customers')
+            ->get()->result_array();
+        $out = [];
+        foreach ($rows as $r) {
+            if (trim((string) $r['value']) !== '') {
+                $out[$this->norm_key($r['name'])] = trim($r['value']);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Maps a Perfex client (+ primary contact + custom fields) to the Asaas customer payload.
+     * Empty values are omitted so updates never blank existing Asaas data.
+     */
+    public function build_customer_payload($client)
+    {
+        $db = $this->ci->db;
+        $contact = $db->where('userid', $client->userid)->order_by('is_primary', 'DESC')->limit(1)->get(db_prefix() . 'contacts')->row();
+        $cf = $this->client_custom_fields($client->userid);
+
+        $digits = function ($v) { return preg_replace('/[^0-9]/', '', (string) $v); };
+        $phone = function ($v) use ($digits) {
+            $v = $digits($v);
+            if (strpos($v, '55') === 0 && strlen($v) > 11) $v = substr($v, 2);
+            return $v;
+        };
+
+        $email = $contact && !empty($contact->email) ? $contact->email : '';
+        if ($email === '') {
+            foreach ($cf as $k => $v) {
+                if (strpos($k, 'email') === 0 && filter_var($v, FILTER_VALIDATE_EMAIL)) { $email = $v; break; }
+            }
+        }
+
+        $mobile = $contact && !empty($contact->phonenumber) ? $phone($contact->phonenumber) : '';
+        if ($mobile === '' && !empty($cf['whatsapp'])) $mobile = $phone($cf['whatsapp']);
+        $landline = $phone($client->phonenumber ?? '');
+        if ($mobile === '' && strlen($landline) == 11) { $mobile = $landline; $landline = ''; }
+
+        $addr = !empty($client->billing_street) ? $client->billing_street : ($client->address ?? '');
+        $number = $cf['n'] ?? ($cf['numero'] ?? '');
+        if ($number === '' && preg_match('/(?:n[º°o\.]*\s*|,\s*)(\d+)\s*$/iu', trim($addr), $m)) $number = $m[1];
+        // street without the trailing number
+        $street = trim(preg_replace('/[,\s-]*(?:n[º°o\.]*\s*)?\d+\s*$/iu', '', trim($addr)), " ,-");
+        $zip = $digits(!empty($client->billing_zip) ? $client->billing_zip : ($client->zip ?? ''));
+
+        $payload = [
+            'name'              => $client->company ?: ($contact ? trim($contact->firstname . ' ' . $contact->lastname) : ''),
+            'cpfCnpj'           => $digits($client->vat ?? ''),
+            'email'             => $email,
+            'company'           => $client->company ?? '',
+            'mobilePhone'       => $mobile,
+            'phone'             => $landline,
+            'postalCode'        => $zip,
+            'address'           => $street,
+            'addressNumber'     => $number === '' ? 'S/N' : $number,
+            'province'          => $cf['bairro'] ?? '',
+            'externalReference' => (string) $client->userid,
+        ];
+        return array_filter($payload, function ($v) { return $v !== '' && $v !== null; });
+    }
+
+    public function find_customer($client)
+    {
+        $vat = preg_replace('/[^0-9]/', '', $client->vat ?? '');
+        if ($vat !== '') {
+            $r = $this->request('/customers', 'GET', ['cpfCnpj' => $vat]);
+            if ($r['success'] && !empty($r['data']['data'])) return $r['data']['data'][0];
+        }
+        $r = $this->request('/customers', 'GET', ['externalReference' => (string) $client->userid]);
+        if ($r['success'] && !empty($r['data']['data'])) return $r['data']['data'][0];
+        return null;
+    }
+
+    /**
+     * Creates the customer in Asaas or, if it exists, updates it with the Perfex data.
+     * Returns ['success'=>bool, 'id'=>?, 'created'=>bool, 'error'=>?]
+     */
+    public function upsert_customer($client, $update_existing = true)
+    {
+        $payload = $this->build_customer_payload($client);
+        $existing = $this->find_customer($client);
+        if ($existing) {
+            if ($update_existing) {
+                $upd = $payload;
+                unset($upd['externalReference']);
+                if (!empty($existing['externalReference'])) unset($upd['externalReference']);
+                else $upd['externalReference'] = (string) $client->userid;
+                $r = $this->update_customer($existing['id'], $upd);
+                if (!$r['success']) return ['success' => false, 'error' => $r['error']];
+            }
+            $this->sync_customer_notifications($existing['id'], !empty($existing['notificationDisabled']), $update_existing);
+            return ['success' => true, 'id' => $existing['id'], 'created' => false];
+        }
+        $r = $this->create_customer($payload);
+        if (!$r['success']) return ['success' => false, 'error' => $r['error']];
+        return ['success' => true, 'id' => $r['data']['id'], 'created' => true];
+    }
+
+    /**
+     * Syncs a page of Perfex clients to Asaas (create/update). Returns counters and next offset.
+     */
+    public function sync_clients_page($offset = 0, $limit = 10)
+    {
+        $this->ci->load->model('clients_model');
+        $rows = $this->ci->db->select('userid')->order_by('userid', 'ASC')->limit($limit, $offset)->get(db_prefix() . 'clients')->result();
+        $out = ['success' => true, 'created' => 0, 'updated' => 0, 'failed' => 0, 'errors' => []];
+        foreach ($rows as $row) {
+            $client = $this->ci->clients_model->get($row->userid);
+            if (!$client) continue;
+            $r = $this->upsert_customer($client, true);
+            if (!$r['success']) {
+                $out['failed']++;
+                $out['errors'][] = '#' . $client->userid . ' ' . ($client->company ?? '') . ': ' . $r['error'];
+            } elseif ($r['created']) {
+                $out['created']++;
+            } else {
+                $out['updated']++;
+            }
+        }
+        $out['hasMore'] = count($rows) == $limit;
+        $out['next'] = $offset + $limit;
+        return $out;
+    }
+
     public function create_customer($data)
     {
         $cfg = $this->get_notification_config();
