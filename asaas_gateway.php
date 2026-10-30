@@ -229,6 +229,138 @@ function asaas_gateway_invoice_added_hook($invoice_id)
             }
         }
     }
+
+    // Auto-create the charge (no-op if Pix Automatico above already created one)
+    asaas_gateway_ensure_invoice_charge($invoice_id);
+}
+
+/**
+ * Configures asaas_lib with the active gateway credentials. Returns the gateway array or null.
+ */
+function asaas_gateway_boot_lib()
+{
+    $CI = &get_instance();
+    $CI->load->library('asaas_gateway/asaas_lib');
+    $CI->load->model('payment_modes_model');
+    foreach ($CI->payment_modes_model->get('', ['active' => 1]) as $g) {
+        if ($g['id'] == 'asaas_gateway') {
+            $is_sandbox = $g['instance']->getSetting('sandbox');
+            $key = $is_sandbox == 1 ? 'api_key_sandbox' : 'api_key_prod';
+            $CI->asaas_lib->set_api_key($CI->encryption->decrypt($g['instance']->getSetting($key)));
+            $CI->asaas_lib->set_sandbox($is_sandbox);
+            return $g;
+        }
+    }
+    return null;
+}
+
+/**
+ * Returns the open (PENDING/OVERDUE) Asaas charge of an invoice, or null.
+ */
+function asaas_gateway_find_open_charge($invoice_id)
+{
+    $CI = &get_instance();
+    $res = $CI->asaas_lib->get_charges_by_external_reference($invoice_id);
+    if (!$res['success'] || empty($res['data']['data'])) return null;
+    $overdue = null;
+    foreach ($res['data']['data'] as $c) {
+        if ($c['status'] == 'PENDING') return $c;
+        if ($c['status'] == 'OVERDUE' && !$overdue) $overdue = $c;
+    }
+    return $overdue;
+}
+
+/**
+ * Creates (once) the Asaas charge for an invoice, with the invoice due date and
+ * billingType UNDEFINED so the customer can pick Pix/Boleto/Card on the same charge.
+ * Returns the charge array (existing or new) or null.
+ */
+function asaas_gateway_ensure_invoice_charge($invoice_id)
+{
+    $CI = &get_instance();
+    $CI->load->model('invoices_model');
+    $CI->load->model('clients_model');
+    $invoice = $CI->invoices_model->get($invoice_id);
+    if (!$invoice) return null;
+
+    if (in_array($invoice->status, [Invoices_model::STATUS_PAID, Invoices_model::STATUS_CANCELLED, Invoices_model::STATUS_DRAFT])) {
+        return null;
+    }
+
+    $gateway = asaas_gateway_boot_lib();
+    if (!$gateway) return null;
+
+    // Only for invoices that allow the Asaas gateway
+    $allowed = @unserialize($invoice->allowed_payment_modes);
+    if (is_array($allowed) && !in_array('asaas_gateway', $allowed)) return null;
+
+    $existing = asaas_gateway_find_open_charge($invoice_id);
+    if ($existing) return $existing;
+
+    $client = $CI->clients_model->get($invoice->clientid);
+    if (!$client) return null;
+
+    $cpfCnpj = preg_replace('/[^0-9]/', '', isset($client->vat) ? $client->vat : '');
+    $customer_id = null;
+    if (!empty($cpfCnpj)) {
+        $found = $CI->asaas_lib->get_customer_by_cpf_cnpj($cpfCnpj);
+        if ($found['success'] && !empty($found['data']['data'])) $customer_id = $found['data']['data'][0]['id'];
+    }
+    if (!$customer_id) {
+        $contact = $CI->clients_model->get_contact(get_primary_contact_user_id($client->userid));
+        $phone = ($contact && !empty($contact->phonenumber)) ? $contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
+        $phone = preg_replace('/[^0-9]/', '', $phone);
+        if (strpos($phone, '55') === 0 && strlen($phone) > 11) $phone = substr($phone, 2);
+        $zip = preg_replace('/[^0-9]/', '', !empty($client->billing_zip) ? $client->billing_zip : ($client->zip ?? ''));
+        $addr = !empty($client->billing_street) ? $client->billing_street : ($client->address ?? '');
+        $num = preg_replace('/[^0-9]/', '', $addr);
+        $created = $CI->asaas_lib->create_customer([
+            'name' => $client->company ?? '',
+            'cpfCnpj' => $cpfCnpj,
+            'email' => $contact ? $contact->email : '',
+            'mobilePhone' => $phone,
+            'externalReference' => $client->userid,
+            'postalCode' => $zip,
+            'addressNumber' => $num === '' ? '0' : $num,
+        ]);
+        if (!$created['success']) {
+            log_activity('Asaas: falha ao criar cliente para fatura ' . $invoice_id . ': ' . $created['error']);
+            return null;
+        }
+        $customer_id = $created['data']['id'];
+    }
+
+    $dueDate = (!empty($invoice->duedate) && strtotime($invoice->duedate) >= strtotime(date('Y-m-d'))) ? $invoice->duedate : date('Y-m-d');
+
+    $charge_data = [
+        'customer' => $customer_id,
+        'billingType' => 'UNDEFINED',
+        'value' => $invoice->total,
+        'dueDate' => $dueDate,
+        'externalReference' => $invoice_id,
+        'description' => 'Invoice #' . $invoice->number,
+    ];
+
+    $fine = $gateway['instance']->getSetting('fine_value');
+    $interest = $gateway['instance']->getSetting('interest_value');
+    if (is_numeric($fine) && $fine > 0) $charge_data['fine'] = ['value' => $fine, 'type' => 'PERCENTAGE'];
+    if (is_numeric($interest) && $interest > 0) $charge_data['interest'] = ['value' => $interest, 'type' => 'PERCENTAGE'];
+
+    $json = $gateway['instance']->getSetting('split_config');
+    if (!empty($json)) {
+        $split = json_decode($json, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($split)) {
+            $charge_data['split'] = hooks()->apply_filters('asaas_gateway_before_split', $split);
+        }
+    }
+
+    $res = $CI->asaas_lib->create_charge($charge_data);
+    if ($res['success']) {
+        log_activity('Asaas: cobrança criada automaticamente para a fatura ' . $invoice_id);
+        return $res['data'];
+    }
+    log_activity('Asaas: falha ao criar cobrança automática da fatura ' . $invoice_id . ': ' . $res['error']);
+    return null;
 }
 
 function asaas_gateway_invoice_cancelled_hook($invoice_id)
@@ -299,6 +431,13 @@ function asaas_gateway_register_merge_fields($fields)
             'invoice',
         ],
     ];
+    $fields[] = [
+        'name' => 'Link do Boleto (Asaas)',
+        'key' => '{asaas_boleto_link}',
+        'available' => [
+            'invoice',
+        ],
+    ];
     return $fields;
 }
 
@@ -329,5 +468,16 @@ function asaas_gateway_invoice_merge_fields($fields, $invoice_id)
     }
 
     $fields['{asaas_nfe_link}'] = $nfe_link;
+
+    // Boleto link: ensures the charge exists, so the e-mail always carries the payment link
+    $boleto_link = '';
+    $charge = asaas_gateway_ensure_invoice_charge($invoice_id);
+    if ($charge) {
+        $url = !empty($charge['bankSlipUrl']) ? $charge['bankSlipUrl'] : ($charge['invoiceUrl'] ?? '');
+        if ($url) {
+            $boleto_link = '<a href="' . $url . '" target="_blank">Clique aqui para visualizar/pagar o boleto</a>';
+        }
+    }
+    $fields['{asaas_boleto_link}'] = $boleto_link;
     return $fields;
 }

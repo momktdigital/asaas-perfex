@@ -231,7 +231,7 @@ class Client extends ClientsController
             'customer' => $customer_id,
             'billingType' => 'PIX',
             'value' => $invoice->total,
-            'dueDate' => date('Y-m-d'),
+            'dueDate' => (!empty($invoice->duedate) && strtotime($invoice->duedate) >= strtotime(date('Y-m-d'))) ? $invoice->duedate : date('Y-m-d'),
             'externalReference' => $invoice_id,
             'description' => 'Invoice #' . $invoice->number
         ];
@@ -243,25 +243,13 @@ class Client extends ClientsController
         $this->apply_fine_and_interest($charge_data);
         $this->apply_overdue_amounts($charge_data, $invoice);
 
-        // Check if charge already exists
-        $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
-        $charge_id = null;
+        // Reuse the open charge of this invoice (avoid duplicates)
+        $open_charge = $this->find_open_charge($invoice_id);
 
-        if ($existing_charges['success'] && !empty($existing_charges['data']['data'])) {
-            // Find a pending charge
-            foreach ($existing_charges['data']['data'] as $ec) {
-                if ($ec['status'] == 'PENDING') {
-                    $charge_id = $ec['id'];
-                    break;
-                }
-            }
-        }
-
-        if ($charge_id) {
-            // Update existing
-            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        if ($open_charge) {
+            if ($open_charge['billingType'] == 'UNDEFINED') unset($charge_data['billingType']);
+            $charge_res = $this->asaas_lib->update_charge($open_charge['id'], $charge_data);
         } else {
-            // Create new
             $charge_res = $this->asaas_lib->create_charge($charge_data);
         }
 
@@ -316,30 +304,19 @@ class Client extends ClientsController
         $this->apply_fine_and_interest($charge_data);
         $this->apply_overdue_amounts($charge_data, $invoice);
 
-        // Check if charge already exists
-        $existing_charges = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
-        $charge_id = null;
+        // Reuse the open charge of this invoice (avoid duplicates)
+        $open_charge = $this->find_open_charge($invoice_id);
 
-        if ($existing_charges['success'] && !empty($existing_charges['data']['data'])) {
-            // Find a pending charge
-            foreach ($existing_charges['data']['data'] as $ec) {
-                if ($ec['status'] == 'PENDING') {
-                    $charge_id = $ec['id'];
-                    break;
-                }
-            }
-        }
-
-        if ($charge_id) {
-            // Update existing
-            $charge_res = $this->asaas_lib->update_charge($charge_id, $charge_data);
+        if ($open_charge) {
+            if ($open_charge['billingType'] == 'UNDEFINED') unset($charge_data['billingType']);
+            $charge_res = $this->asaas_lib->update_charge($open_charge['id'], $charge_data);
         } else {
-            // Create new
             $charge_res = $this->asaas_lib->create_charge($charge_data);
         }
 
         if($charge_res['success']) {
-            echo json_encode(['success' => true, 'bankSlipUrl' => $charge_res['data']['bankSlipUrl']]);
+            $slip = !empty($charge_res['data']['bankSlipUrl']) ? $charge_res['data']['bankSlipUrl'] : ($charge_res['data']['invoiceUrl'] ?? '');
+            echo json_encode(['success' => true, 'bankSlipUrl' => $slip]);
         } else {
             echo json_encode(['success' => false, 'message' => $charge_res['error']]);
         }
@@ -439,6 +416,21 @@ class Client extends ClientsController
         } else {
             echo json_encode(['success' => false, 'message' => $res['error']]);
         }
+    }
+
+    /**
+     * Returns the open (PENDING first, then OVERDUE) Asaas charge of an invoice, or null.
+     */
+    private function find_open_charge($invoice_id)
+    {
+        $res = $this->asaas_lib->get_charges_by_external_reference($invoice_id);
+        if (!$res['success'] || empty($res['data']['data'])) return null;
+        $overdue = null;
+        foreach ($res['data']['data'] as $ec) {
+            if ($ec['status'] == 'PENDING') return $ec;
+            if ($ec['status'] == 'OVERDUE' && !$overdue) $overdue = $ec;
+        }
+        return $overdue;
     }
 
     private function get_or_create_asaas_customer($client)
