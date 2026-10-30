@@ -102,6 +102,20 @@ function asaas_gateway_settings_notifications_button()
         var $field = $("[name$=\'asaas_gateway_notif_disable_all\']").first().closest(".form-group");
         if (!$field.length || $("#asaas_sync_notif_btn").length) return;
         $field.after(\'<div class="form-group"><button type="button" id="asaas_sync_notif_btn" class="btn btn-warning">Aplicar notificações a todos os clientes existentes no Asaas</button> <span id="asaas_sync_notif_status" class="mleft10"></span><p class="text-muted mtop5">Salve as configurações antes de executar. O processo roda em lotes e pode demorar com muitos clientes.</p></div>\');
+        function asaasToggleNotif() {
+            var disableAll = $("[name$=\'asaas_gateway_notif_disable_all\']:checked").val() == "1";
+            $("[name*=\'asaas_gateway_notif_\']").not("[name$=\'asaas_gateway_notif_disable_all\']").each(function() {
+                var $group = $(this).closest(".form-group");
+                if (disableAll) {
+                    if ($(this).val() == "0") { $(this).prop("checked", true); }
+                    $group.css({"opacity": 0.5, "pointer-events": "none"});
+                } else {
+                    $group.css({"opacity": "", "pointer-events": ""});
+                }
+            });
+        }
+        $("[name$=\'asaas_gateway_notif_disable_all\']").on("change", asaasToggleNotif);
+        asaasToggleNotif();
         $("#asaas_sync_notif_btn").on("click", function() {
             if (!confirm("Aplicar a configuração atual de notificações a TODOS os clientes do Asaas?")) return;
             var $btn = $(this).prop("disabled", true), total = 0, failed = 0;
