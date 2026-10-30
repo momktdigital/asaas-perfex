@@ -139,53 +139,54 @@ function asaas_gateway_admin_invoice_footer()
     $CI = &get_instance();
     $uri = $CI->uri->uri_string();
 
-    if (strpos($uri, 'invoices/list_invoices/') !== false || strpos($uri, 'invoices/invoice/') !== false || strpos($uri, 'invoices#') !== false) {
-        echo '<script>
-        $(function() {
-            // Check if we are viewing an invoice
-            $(document).ajaxComplete(function(event, xhr, settings) {
-                if (settings.url.indexOf("invoices/get_invoice_data_ajax") !== -1) {
-                    // Check if it has asaas_gateway payment
-                    setTimeout(function() {
-                        var hasAsaasPayment = $(".invoice-html-payment-modes").text().indexOf("Asaas") !== -1 || $(".table-invoice-payments").text().indexOf("Asaas") !== -1;
-                        if(hasAsaasPayment && $(".invoice-status-bg-paid").length > 0) {
-                            var invoiceId = $("input[name=\'invoiceid\']").val();
-                            if(invoiceId && $("#asaas_refund_btn").length == 0) {
-                                var btnHtml = \'<a href="#" id="asaas_refund_btn" class="btn btn-warning pull-right mleft5" onclick="refundAsaasPayment(\' + invoiceId + \'); return false;"><i class="fa fa-undo"></i> Estornar no Asaas</a>\';
-                                $(".invoice-html-status-container").parent().append(btnHtml);
-
-                                // Check for NFE
-                                $.get(admin_url + "asaas_gateway/admin/check_nfe/" + invoiceId, function(res) {
-                                    var nfeData = JSON.parse(res);
-                                    if(nfeData.has_nfe && nfeData.nfe_link) {
-                                        var nfeBtn = \'<a href="\' + nfeData.nfe_link + \'" target="_blank" class="btn btn-info pull-right mleft5"><i class="fa fa-file-pdf-o"></i> Visualizar NF-e (Asaas)</a>\';
-                                        $(".invoice-html-status-container").parent().append(nfeBtn);
-                                    }
-                                });
-                            }
-                        }
-                    }, 500);
-                }
-            });
-        });
-
-        function refundAsaasPayment(invoiceId) {
-            if(confirm("Tem certeza que deseja estornar totalmente este pagamento no Asaas? O valor será devolvido ao cliente e a cobrança será marcada como estornada.")) {
-                $.post(admin_url + "asaas_gateway/admin/refund_payment", { invoice_id: invoiceId }, function(response) {
-                    response = JSON.parse(response);
-                    if(response.success) {
-                        alert_float("success", "Pagamento estornado com sucesso no Asaas!");
-                        window.location.reload();
-                    } else {
-                        alert_float("danger", "Erro ao estornar: " + response.error);
-                    }
-                }).fail(function() {
-                    alert_float("danger", "Erro na requisição.");
-                });
-            }
-        }
-        </script>';
+    // Invoice view page: admin/invoices/list_invoices/{id} or admin/invoices/invoice/{id}
+    if (!preg_match('#invoices/(?:list_invoices|invoice)/(\d+)#', $uri, $m) || !has_permission('invoices', '', 'edit')) {
+        return;
     }
+    $invoice_id = (int) $m[1];
+
+    $paid_via_asaas = $CI->db->where('invoiceid', $invoice_id)
+        ->where('paymentmode', 'asaas_gateway')
+        ->count_all_results(db_prefix() . 'invoicepaymentrecords') > 0;
+    if (!$paid_via_asaas) {
+        return;
+    }
+
+    $nfe_url = admin_url('asaas_gateway/admin/check_nfe/' . $invoice_id);
+    $refund_url = admin_url('asaas_gateway/admin/refund_payment');
+    echo '<script>
+    $(function() {
+        if ($("#asaas_refund_btn").length) return;
+        var btn = $(\'<a href="#" id="asaas_refund_btn" class="btn btn-warning mleft5"><i class="fa fa-undo"></i> Estornar no Asaas</a>\');
+        var targets = ["#invoice-top .btn-group:first", "#invoice-top ._buttons", "._buttons .pull-right", ".invoice-html-status-container", "._buttons", ".panel-body:first"];
+        var placed = false;
+        for (var i = 0; i < targets.length && !placed; i++) {
+            var $t = $(targets[i]).first();
+            if ($t.length) { $t.after(btn); placed = true; }
+        }
+        if (!placed) { btn.css({position: "fixed", bottom: "20px", right: "20px", "z-index": 9999}).appendTo("body"); }
+        btn.on("click", function(e) {
+            e.preventDefault();
+            if (!confirm("Tem certeza que deseja estornar totalmente este pagamento no Asaas? O valor será devolvido ao cliente e a cobrança será marcada como estornada.")) return;
+            var csrf = {}; csrf[csrfData.token_name] = csrfData.hash;
+            $.post(' . json_encode($refund_url) . ', $.extend({ invoice_id: ' . $invoice_id . ' }, csrf), function(response) {
+                response = typeof response === "string" ? JSON.parse(response) : response;
+                if (response.success) {
+                    alert_float("success", "Pagamento estornado com sucesso no Asaas!");
+                    window.location.reload();
+                } else {
+                    alert_float("danger", "Erro ao estornar: " + response.error);
+                }
+            }).fail(function() { alert_float("danger", "Erro na requisição."); });
+        });
+        $.get(' . json_encode($nfe_url) . ', function(res) {
+            var d = typeof res === "string" ? JSON.parse(res) : res;
+            if (d.has_nfe && d.nfe_link) {
+                btn.after(\'<a href="\' + d.nfe_link + \'" target="_blank" class="btn btn-info mleft5"><i class="fa fa-file-pdf-o"></i> Visualizar NF-e (Asaas)</a>\');
+            }
+        });
+    });
+    </script>';
 }
 
 function asaas_gateway_inject_payment_button($data)
@@ -391,34 +392,10 @@ function asaas_gateway_ensure_invoice_charge($invoice_id)
     $client = $CI->clients_model->get($invoice->clientid);
     if (!$client) return null;
 
-    $cpfCnpj = preg_replace('/[^0-9]/', '', isset($client->vat) ? $client->vat : '');
-    $customer_id = null;
-    if (!empty($cpfCnpj)) {
-        $found = $CI->asaas_lib->get_customer_by_cpf_cnpj($cpfCnpj);
-        if ($found['success'] && !empty($found['data']['data'])) $customer_id = $found['data']['data'][0]['id'];
-    }
+    $customer_id = asaas_gateway_ensure_customer($client);
     if (!$customer_id) {
-        $contact = $CI->clients_model->get_contact(get_primary_contact_user_id($client->userid));
-        $phone = ($contact && !empty($contact->phonenumber)) ? $contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
-        $phone = preg_replace('/[^0-9]/', '', $phone);
-        if (strpos($phone, '55') === 0 && strlen($phone) > 11) $phone = substr($phone, 2);
-        $zip = preg_replace('/[^0-9]/', '', !empty($client->billing_zip) ? $client->billing_zip : ($client->zip ?? ''));
-        $addr = !empty($client->billing_street) ? $client->billing_street : ($client->address ?? '');
-        $num = preg_replace('/[^0-9]/', '', $addr);
-        $created = $CI->asaas_lib->create_customer([
-            'name' => $client->company ?? '',
-            'cpfCnpj' => $cpfCnpj,
-            'email' => $contact ? $contact->email : '',
-            'mobilePhone' => $phone,
-            'externalReference' => $client->userid,
-            'postalCode' => $zip,
-            'addressNumber' => $num === '' ? '0' : $num,
-        ]);
-        if (!$created['success']) {
-            log_activity('Asaas: falha ao criar cliente para fatura ' . $invoice_id . ': ' . $created['error']);
-            return null;
-        }
-        $customer_id = $created['data']['id'];
+        log_activity('Asaas: falha ao obter/criar cliente para fatura ' . $invoice_id);
+        return null;
     }
 
     $dueDate = (!empty($invoice->duedate) && strtotime($invoice->duedate) >= strtotime(date('Y-m-d'))) ? $invoice->duedate : date('Y-m-d');
@@ -454,6 +431,66 @@ function asaas_gateway_ensure_invoice_charge($invoice_id)
     return null;
 }
 
+hooks()->add_action('after_client_added', 'asaas_gateway_client_added_hook');
+hooks()->add_action('client_created', 'asaas_gateway_client_added_hook');
+
+/**
+ * Creates the customer in Asaas as soon as it is created in Perfex (no invoice needed).
+ */
+function asaas_gateway_client_added_hook($client_id)
+{
+    static $done = [];
+    if (is_array($client_id)) {
+        $client_id = $client_id['id'] ?? ($client_id['userid'] ?? null);
+    }
+    if (!$client_id || isset($done[$client_id])) return;
+    $done[$client_id] = true;
+    try {
+        $CI = &get_instance();
+        $CI->load->model('clients_model');
+        $client = $CI->clients_model->get($client_id);
+        if ($client) asaas_gateway_ensure_customer($client);
+    } catch (Throwable $e) {
+        log_activity('Asaas: erro ao criar cliente ' . $client_id . ': ' . $e->getMessage());
+    }
+}
+
+/**
+ * Finds (by CPF/CNPJ) or creates the Asaas customer for a Perfex client. Returns the Asaas id or null.
+ */
+function asaas_gateway_ensure_customer($client)
+{
+    $CI = &get_instance();
+    if (!asaas_gateway_boot_lib()) return null;
+
+    $cpfCnpj = preg_replace('/[^0-9]/', '', isset($client->vat) ? $client->vat : '');
+    if (!empty($cpfCnpj)) {
+        $found = $CI->asaas_lib->get_customer_by_cpf_cnpj($cpfCnpj);
+        if ($found['success'] && !empty($found['data']['data'])) return $found['data']['data'][0]['id'];
+    }
+    $contact = $CI->clients_model->get_contact(get_primary_contact_user_id($client->userid));
+    $phone = ($contact && !empty($contact->phonenumber)) ? $contact->phonenumber : (isset($client->phonenumber) ? $client->phonenumber : '');
+    $phone = preg_replace('/[^0-9]/', '', $phone);
+    if (strpos($phone, '55') === 0 && strlen($phone) > 11) $phone = substr($phone, 2);
+    $zip = preg_replace('/[^0-9]/', '', !empty($client->billing_zip) ? $client->billing_zip : ($client->zip ?? ''));
+    $addr = !empty($client->billing_street) ? $client->billing_street : ($client->address ?? '');
+    $num = preg_replace('/[^0-9]/', '', $addr);
+    $created = $CI->asaas_lib->create_customer([
+        'name' => $client->company ?? '',
+        'cpfCnpj' => $cpfCnpj,
+        'email' => $contact ? $contact->email : '',
+        'mobilePhone' => $phone,
+        'externalReference' => $client->userid,
+        'postalCode' => $zip,
+        'addressNumber' => $num === '' ? '0' : $num,
+    ]);
+    if (!$created['success']) {
+        log_activity('Asaas: falha ao criar cliente ' . $client->userid . ': ' . $created['error']);
+        return null;
+    }
+    log_activity('Asaas: cliente ' . $client->userid . ' criado no Asaas (' . $created['data']['id'] . ')');
+    return $created['data']['id'];
+}
 function asaas_gateway_invoice_cancelled_hook($invoice_id)
 {
     asaas_gateway_delete_pending_charges($invoice_id);
