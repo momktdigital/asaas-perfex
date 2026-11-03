@@ -25,6 +25,71 @@ register_language_files(ASAAS_GATEWAY_MODULE_NAME, [ASAAS_GATEWAY_MODULE_NAME]);
 register_payment_gateway('asaas_gateway_module', 'asaas_gateway');
 
 hooks()->add_action('after_invoice_added', 'asaas_gateway_invoice_added_hook');
+hooks()->add_action('after_invoice_updated', 'asaas_gateway_invoice_updated_hook');
+hooks()->add_action('invoice_updated', 'asaas_gateway_invoice_updated_hook');
+hooks()->add_action('after_cron_run', 'asaas_gateway_cron_retry_missing_charges');
+
+/**
+ * Keeps the open Asaas charge in sync (value, due date, description) when an invoice is edited.
+ * Creates the charge when the invoice has none yet.
+ */
+function asaas_gateway_invoice_updated_hook($data)
+{
+    static $running = [];
+    $invoice_id = is_array($data) ? ($data['id'] ?? null) : $data;
+    if (!$invoice_id || isset($running[$invoice_id])) return;
+    $running[$invoice_id] = true;
+    try {
+        $CI = &get_instance();
+        $CI->load->model('invoices_model');
+        $invoice = $CI->invoices_model->get($invoice_id);
+        if (!$invoice || in_array($invoice->status, [Invoices_model::STATUS_PAID, Invoices_model::STATUS_CANCELLED, Invoices_model::STATUS_DRAFT])) {
+            unset($running[$invoice_id]);
+            return;
+        }
+        if (!asaas_gateway_boot_lib()) { unset($running[$invoice_id]); return; }
+
+        $charge = asaas_gateway_find_open_charge($invoice_id);
+        if (!$charge) {
+            asaas_gateway_ensure_invoice_charge($invoice_id);
+        } else {
+            $upd = [];
+            if (abs((float) $charge['value'] - (float) $invoice->total) > 0.001) $upd['value'] = (float) $invoice->total;
+            if (!empty($invoice->duedate) && $invoice->duedate != $charge['dueDate'] && strtotime($invoice->duedate) >= strtotime(date('Y-m-d'))) {
+                $upd['dueDate'] = $invoice->duedate;
+            }
+            $desc = 'Invoice #' . $invoice->number;
+            if (($charge['description'] ?? '') !== $desc) $upd['description'] = $desc;
+            if ($upd) {
+                $r = $CI->asaas_lib->update_charge($charge['id'], $upd);
+                log_activity('Asaas: cobrança ' . $charge['id'] . ' da fatura ' . $invoice_id . ($r['success'] ? ' atualizada.' : ' falhou ao atualizar: ' . $r['error']));
+            }
+        }
+    } catch (Throwable $e) {
+        log_activity('Asaas: erro ao atualizar cobrança da fatura ' . $invoice_id . ': ' . $e->getMessage());
+    }
+    unset($running[$invoice_id]);
+}
+
+/**
+ * After the cron, retries invoices of the last days that still have no Asaas charge
+ * (e.g. API failures / rate limits while the cron generated many invoices).
+ */
+function asaas_gateway_cron_retry_missing_charges($manually = false)
+{
+    $CI = &get_instance();
+    try {
+        $rows = $CI->db->select('id')->from(db_prefix() . 'invoices')
+            ->where_in('status', [Invoices_model::STATUS_UNPAID, Invoices_model::STATUS_PARTIALLY, Invoices_model::STATUS_OVERDUE])
+            ->where('date >=', date('Y-m-d', strtotime('-5 days')))
+            ->order_by('id', 'DESC')->limit(100)->get()->result();
+        foreach ($rows as $r) {
+            asaas_gateway_ensure_invoice_charge($r->id);
+        }
+    } catch (Throwable $e) {
+        log_activity('Asaas: erro na rotina de cobranças pendentes: ' . $e->getMessage());
+    }
+}
 hooks()->add_action('invoice_marked_as_cancelled', 'asaas_gateway_invoice_cancelled_hook');
 hooks()->add_action('before_invoice_deleted', 'asaas_gateway_invoice_deleted_hook');
 hooks()->add_filter('customer_profile_tabs', 'asaas_gateway_customer_profile_tabs');

@@ -53,9 +53,16 @@ class Asaas_lib
              curl_setopt($ch, CURLOPT_URL, $url);
         }
 
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $error = curl_error($ch);
+        // Retries on rate limit (429) and, for idempotent verbs, on transient errors (5xx / network)
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            $idempotent = $method != 'POST';
+            $retry = $http_code == 429 || ($idempotent && ($error || $http_code >= 500));
+            if (!$retry || $attempt == 3) break;
+            sleep($attempt * 2);
+        }
         curl_close($ch);
 
         if ($error) {
