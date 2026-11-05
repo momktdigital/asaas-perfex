@@ -36,8 +36,10 @@ hooks()->add_action('after_cron_run', 'asaas_gateway_cron_retry_missing_charges'
 function asaas_gateway_invoice_updated_hook($data)
 {
     static $running = [];
-    $invoice_id = is_array($data) ? ($data['id'] ?? null) : $data;
-    if (!$invoice_id || isset($running[$invoice_id])) return;
+    $invoice_id = is_array($data) ? ($data['id'] ?? ($data['invoice_id'] ?? null)) : (is_object($data) ? ($data->id ?? null) : $data);
+    if (!$invoice_id || !is_numeric($invoice_id)) return;
+    $invoice_id = (int) $invoice_id;
+    if (isset($running[$invoice_id])) return;
     $running[$invoice_id] = true;
     try {
         $CI = &get_instance();
@@ -319,6 +321,14 @@ function asaas_gateway_inject_payment_button($data)
 
 function asaas_gateway_invoice_added_hook($invoice_id)
 {
+    if (is_array($invoice_id)) {
+        $invoice_id = $invoice_id['id'] ?? ($invoice_id['invoice_id'] ?? null);
+    } elseif (is_object($invoice_id)) {
+        $invoice_id = $invoice_id->id ?? null;
+    }
+    if (!$invoice_id || !is_numeric($invoice_id)) return;
+    $invoice_id = (int) $invoice_id;
+
     $CI = &get_instance();
     $CI->load->model('invoices_model');
     $CI->load->model('clients_model');
@@ -435,6 +445,14 @@ function asaas_gateway_boot_lib()
  */
 function asaas_gateway_find_open_charge($invoice_id)
 {
+    if (is_array($invoice_id)) {
+        $invoice_id = $invoice_id['id'] ?? ($invoice_id['invoice_id'] ?? null);
+    } elseif (is_object($invoice_id)) {
+        $invoice_id = $invoice_id->id ?? null;
+    }
+    if (!$invoice_id || !is_numeric($invoice_id)) return null;
+    $invoice_id = (int) $invoice_id;
+
     $CI = &get_instance();
     $res = $CI->asaas_lib->get_charges_by_external_reference($invoice_id);
     if (!$res['success'] || empty($res['data']['data'])) return null;
@@ -453,6 +471,14 @@ function asaas_gateway_find_open_charge($invoice_id)
  */
 function asaas_gateway_ensure_invoice_charge($invoice_id)
 {
+    if (is_array($invoice_id)) {
+        $invoice_id = $invoice_id['id'] ?? ($invoice_id['invoice_id'] ?? null);
+    } elseif (is_object($invoice_id)) {
+        $invoice_id = $invoice_id->id ?? null;
+    }
+    if (!$invoice_id || !is_numeric($invoice_id)) return null;
+    $invoice_id = (int) $invoice_id;
+
     $CI = &get_instance();
     $CI->load->model('invoices_model');
     $CI->load->model('clients_model');
@@ -566,6 +592,14 @@ function asaas_gateway_invoice_deleted_hook($invoice_id)
 
 function asaas_gateway_delete_pending_charges($invoice_id)
 {
+    if (is_array($invoice_id)) {
+        $invoice_id = $invoice_id['id'] ?? ($invoice_id['invoice_id'] ?? null);
+    } elseif (is_object($invoice_id)) {
+        $invoice_id = $invoice_id->id ?? null;
+    }
+    if (!$invoice_id || !is_numeric($invoice_id)) return;
+    $invoice_id = (int) $invoice_id;
+
     $CI = &get_instance();
     $CI->load->model('payment_modes_model');
 
@@ -634,6 +668,14 @@ function asaas_gateway_register_merge_fields($fields)
 
 function asaas_gateway_invoice_merge_fields($fields, $invoice_id)
 {
+    if (is_array($invoice_id)) {
+        $invoice_id = $invoice_id['id'] ?? ($invoice_id['invoice_id'] ?? null);
+    } elseif (is_object($invoice_id)) {
+        $invoice_id = $invoice_id->id ?? null;
+    }
+    if (!$invoice_id || !is_numeric($invoice_id)) return $fields;
+    $invoice_id = (int) $invoice_id;
+
     $nfe_link = '';
     $CI = &get_instance();
     $CI->load->library('asaas_gateway/asaas_lib');
